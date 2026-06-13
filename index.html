@@ -3,194 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chapiko Kindle</title>
+<title>チャピ子 表示中継</title>
 <style>
-  html, body { margin:0; padding:0; background:#fff; color:#000; font-family: serif; }
-  body { font-size: 20px; line-height: 1.55; }
-  #app { max-width: 820px; margin: 0 auto; padding: 12px; }
-  h1 { font-size: 26px; margin: 6px 0 10px; font-weight: bold; }
-  .bar { border: 2px solid #000; padding: 8px; margin-bottom: 10px; }
-  label { display:block; font-size: 16px; margin: 4px 0; }
-  input, textarea, button { font-size: 20px; color:#000; background:#fff; border:2px solid #000; border-radius:0; box-sizing:border-box; }
-  textarea { width: 100%; height: 110px; padding: 8px; font-family: sans-serif; }
-  input { width: 100%; padding: 6px; }
-  button { padding: 8px 12px; margin: 4px 4px 4px 0; font-weight: bold; }
-  .small { font-size: 15px; }
-  .row { margin: 6px 0; }
-  #status { font-size: 16px; margin: 6px 0; }
-  .msg { border-top: 1px solid #000; padding: 10px 0; white-space: pre-wrap; word-break: break-word; }
-  .role { font-size: 15px; font-weight: bold; margin-bottom: 3px; }
-  .user .role:after { content: 'あなた'; }
-  .assistant .role:after { content: 'チャピ子'; }
-  .user { font-family: sans-serif; }
-  .assistant { font-family: serif; }
-  .hint { font-size: 15px; border: 1px solid #000; padding: 6px; margin: 8px 0; }
-  a { color:#000; }
+  html, body { margin:0; padding:0; background:#fff; color:#000; }
+  body { font-family: serif; font-size: 22px; line-height: 1.55; }
+  #app { max-width: 900px; margin: 0 auto; padding: 12px; }
+  h1 { font-size: 30px; margin: 8px 0 12px; }
+  .box { border: 2px solid #000; padding: 12px; margin: 10px 0; }
+  .btn { display:block; border: 3px solid #000; padding: 14px; margin: 12px 0; color:#000; text-decoration:none; font-weight:bold; text-align:center; font-size: 24px; }
+  .small { font-size: 16px; }
+  iframe { width:100%; height: 72vh; border: 2px solid #000; background:#fff; }
 </style>
 </head>
 <body>
 <div id="app">
-  <h1>Chapiko Kindle</h1>
+  <h1>チャピ子 表示中継</h1>
 
-  <div class="bar">
-    <label for="apiUrl">中継API URL</label>
-    <input id="apiUrl" type="text" placeholder="例: https://xxxxx.workers.dev/api/chat">
-    <label for="code">合言葉 任意</label>
-    <input id="code" type="password" autocomplete="off" placeholder="ACCESS_CODEを設定した場合だけ入力">
-    <div class="small">GitHub Pages版です。OpenAI APIキーはここに置きません。実際に送信するにはCloudflare Workerの /api/chat URLを入れます。</div>
-  </div>
-
-  <div class="bar">
-    <textarea id="input" placeholder="ここに質問を書く"></textarea>
-    <div class="row">
-      <button id="sendBtn" onclick="sendMsg()">送信</button>
-      <button onclick="quick('短く箇条書きで答えて。\n')">短く</button>
-      <button onclick="quick('中学生にもわかるように説明して。\n')">やさしく</button>
-      <button onclick="clearChat()">消去</button>
+  <div class="box">
+    <a class="btn" href="https://chatgpt.com/" target="_self">チャピ子を開く</a>
+    <a class="btn" href="https://chatgpt.com/?model=auto" target="_self">新しいチャットを開く</a>
+    <div class="small">
+      Kindleでこのページをブックマークしておくための軽い中継ページです。APIキーや中継サーバーは使いません。
     </div>
-    <div id="status">準備OK</div>
   </div>
 
-  <div class="hint">
-    表示確認用URL: <a href="https://kouheim1979.github.io/chapiko/">https://kouheim1979.github.io/chapiko/</a><br>
-    Workerに直接デプロイした場合は、このページではなくWorkerのURLをKindleで開けば、中継API URLの入力なしで使えます。
+  <div class="box">
+    <div class="small">
+      下に画面が出ればそのまま使えます。出ない場合は、上の「チャピ子を開く」を押してください。
+    </div>
+    <iframe src="https://chatgpt.com/" title="ChatGPT"></iframe>
   </div>
-
-  <div id="chat"></div>
 </div>
-
-<script>
-var historyList = [];
-
-(function(){
-  loadState();
-  render();
-  var input = document.getElementById('input');
-  input.onkeydown = function(e){
-    e = e || window.event;
-    if ((e.ctrlKey || e.metaKey) && e.keyCode === 13) sendMsg();
-  };
-})();
-
-function defaultApiUrl(){
-  if (location.hostname.indexOf('workers.dev') >= 0) return '/api/chat';
-  return '';
-}
-function setStatus(t){ document.getElementById('status').innerHTML = escapeHtml(t); }
-function getCode(){ return document.getElementById('code').value || ''; }
-function getApiUrl(){ return trim(document.getElementById('apiUrl').value || defaultApiUrl()); }
-
-function quick(prefix){
-  var el = document.getElementById('input');
-  el.value = prefix + el.value;
-  el.focus();
-}
-
-function addMsg(role, text){
-  historyList.push({ role: role, content: text });
-  if (historyList.length > 16) historyList = historyList.slice(historyList.length - 16);
-  saveState();
-  render();
-}
-
-function render(){
-  var box = document.getElementById('chat');
-  var html = '';
-  for (var i=0; i<historyList.length; i++) {
-    var m = historyList[i];
-    html += '<div class="msg ' + (m.role === 'user' ? 'user' : 'assistant') + '">';
-    html += '<div class="role"></div>';
-    html += escapeHtml(m.content);
-    html += '</div>';
-  }
-  box.innerHTML = html;
-}
-
-function sendMsg(){
-  var apiUrl = getApiUrl();
-  if (!apiUrl) {
-    setStatus('Cloudflare Workerの /api/chat URLを入れてください');
-    return;
-  }
-
-  var input = document.getElementById('input');
-  var text = trim(input.value);
-  if (!text) { setStatus('質問が空です'); return; }
-
-  input.value = '';
-  addMsg('user', text);
-  setStatus('送信中...');
-  document.getElementById('sendBtn').disabled = true;
-
-  saveEndpoint();
-
-  var payload = {
-    message: text,
-    history: historyList.slice(Math.max(0, historyList.length - 12)),
-    code: getCode()
-  };
-
-  xhrPost(apiUrl, JSON.stringify(payload), function(ok, resText){
-    document.getElementById('sendBtn').disabled = false;
-    if (!ok) {
-      addMsg('assistant', 'エラー: ' + resText);
-      setStatus('エラー');
-      return;
-    }
-    var data;
-    try { data = JSON.parse(resText); } catch(e) { data = { reply: resText }; }
-    if (data.error) {
-      addMsg('assistant', 'エラー: ' + data.error);
-      setStatus('エラー');
-      return;
-    }
-    addMsg('assistant', data.reply || '(返答なし)');
-    setStatus('準備OK');
-  });
-}
-
-function xhrPost(url, body, cb){
-  var x = new XMLHttpRequest();
-  x.open('POST', url, true);
-  x.setRequestHeader('Content-Type', 'application/json');
-  x.onreadystatechange = function(){
-    if (x.readyState === 4) {
-      cb(x.status >= 200 && x.status < 300, x.responseText || ('HTTP ' + x.status));
-    }
-  };
-  x.onerror = function(){ cb(false, '通信できません。Worker側のCORS設定やURLを確認してください。'); };
-  x.send(body);
-}
-
-function clearChat(){
-  historyList = [];
-  saveState();
-  render();
-  setStatus('消去しました');
-}
-
-function saveEndpoint(){
-  try {
-    localStorage.setItem('chapiko_api_url', document.getElementById('apiUrl').value || '');
-    localStorage.setItem('chapiko_code', document.getElementById('code').value || '');
-  } catch(e) {}
-}
-function saveState(){
-  try { localStorage.setItem('chapiko_history', JSON.stringify(historyList)); } catch(e) {}
-}
-function loadState(){
-  try {
-    var s = localStorage.getItem('chapiko_history');
-    if (s) historyList = JSON.parse(s) || [];
-    document.getElementById('apiUrl').value = localStorage.getItem('chapiko_api_url') || defaultApiUrl();
-    document.getElementById('code').value = localStorage.getItem('chapiko_code') || '';
-  } catch(e) { historyList = []; }
-}
-function escapeHtml(s){
-  s = String(s == null ? '' : s);
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-function trim(s){ return String(s || '').replace(/^\s+|\s+$/g, ''); }
-</script>
 </body>
 </html>
