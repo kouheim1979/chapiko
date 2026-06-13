@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>チャピ子 オンライン表示中継</title>
+<title>チャピ子 Kindle</title>
 <style>
   html, body { margin:0; padding:0; background:#fff; color:#000; }
   body { font-family: sans-serif; font-size:22px; line-height:1.55; }
@@ -19,11 +19,20 @@
 </head>
 <body>
 <div id="app">
-  <h1>チャピ子 オンライン表示中継</h1>
+  <h1>チャピ子 Kindle</h1>
 
   <div class="box">
+    <h2>無料・APIなし</h2>
     <div class="small">
-      PCやスマホでログイン済みのChatGPT画面を共有し、Kindle側では表示だけ見ます。ローカルサーバーは使いません。オンラインサービスは VDO.Ninja を使います。
+      GitHub Pagesだけで動く簡易チャットです。本物の大規模LLMではありませんが、Kindleでも軽く開けます。
+    </div>
+    <a class="btn" href="simple-llm.html">簡易LLMを開く</a>
+  </div>
+
+  <div class="box">
+    <h2>オンライン表示中継</h2>
+    <div class="small">
+      PCやスマホでログイン済みのChatGPT画面を共有し、Kindle側では表示だけ見ます。オンラインサービスは VDO.Ninja を使います。
     </div>
     <label>部屋ID</label>
     <input id="room" placeholder="例: CHAPIKO123">
@@ -45,7 +54,7 @@
   </div>
 
   <div class="box small">
-    Kindleで映らない場合は、KindleのブラウザがWebRTC表示に対応していない可能性があります。その場合、この方式ではなく「表示を画像にして配るサービス」が必要です。
+    Kindleで映らない場合は、KindleのブラウザがWebRTC表示に対応していない可能性があります。その場合は、上の「簡易LLM」を使う方が安定します。
   </div>
 </div>
 
