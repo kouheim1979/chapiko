@@ -7,18 +7,23 @@
 <style>
   html, body { margin:0; padding:0; background:#fff; color:#000; }
   body { font-family: sans-serif; font-size: 20px; line-height: 1.55; }
-  #app { max-width: 980px; margin: 0 auto; padding: 12px; }
+  #app { max-width: 1040px; margin: 0 auto; padding: 12px; }
   h1 { font-size: 30px; margin: 8px 0 12px; }
   h2 { font-size: 23px; margin: 10px 0 6px; }
+  h3 { font-size: 20px; margin: 12px 0 4px; border-top:1px solid #000; padding-top:8px; }
   .box { border: 2px solid #000; padding: 12px; margin: 10px 0; }
-  textarea, button, select { font-size: 20px; color:#000; background:#fff; border:2px solid #000; box-sizing:border-box; }
+  textarea, button, select, input { font-size: 20px; color:#000; background:#fff; border:2px solid #000; box-sizing:border-box; }
   textarea { width:100%; height:120px; padding:8px; }
   button { padding:10px 14px; margin:5px 5px 5px 0; font-weight:bold; }
   select { width:100%; padding:8px; margin:5px 0; }
   label { display:block; margin:6px 0; }
   .small { font-size: 15px; }
+  .tiny { font-size: 13px; }
   .result { border-top:1px solid #000; padding:10px 0; white-space:pre-wrap; word-break:break-word; }
   .modelName { font-weight:bold; font-size:16px; }
+  .modelRow { border-top:1px dotted #000; padding:6px 0; }
+  .tag { display:inline-block; border:1px solid #000; padding:1px 4px; margin-left:4px; font-size:12px; }
+  .warn { border:2px dashed #000; padding:8px; margin:8px 0; }
   a { color:#000; }
 </style>
 </head>
@@ -27,15 +32,20 @@
   <h1>無料LLM横断 チャピ子ハブ</h1>
 
   <div class="box small">
-    GitHub Pagesだけで動く無料LLM横断ページです。APIキーは使いません。WebLLMモデルは初回に大きなモデルをダウンロードします。PC/スマホ向けです。Kindleでは簡易LLMだけ使える想定です。
+    GitHub Pagesだけで動く無料LLM横断ページです。APIキーは使いません。モデル本体はGitHubに置かず、WebLLM/Hugging Face側から取得して、推論はブラウザ内で行います。PC/スマホ向けです。Kindleでは簡易LLMだけ使う想定です。
   </div>
 
   <div class="box">
     <h2>質問</h2>
     <textarea id="prompt" placeholder="ここに質問を書く"></textarea>
-    <label><input type="checkbox" id="mMini" checked> チャピ子ミニ ルール型</label>
-    <label><input type="checkbox" id="mLlama1"> WebLLM Llama 3.2 1B 無料ローカル</label>
-    <label><input type="checkbox" id="mLlama3"> WebLLM Llama 3.2 3B 無料ローカル</label>
+    <div>
+      <button onclick="selectPreset('safe')">軽量おすすめ</button>
+      <button onclick="selectPreset('jp')">日本語寄り</button>
+      <button onclick="selectPreset('tech')">技術/コード寄り</button>
+      <button onclick="selectPreset('all')">全部選択</button>
+      <button onclick="selectPreset('none')">全部解除</button>
+    </div>
+    <div id="modelList"></div>
     <button onclick="askSelected()">選択モデルに聞く</button>
     <button onclick="summarizeResults()">回答をまとめる</button>
     <button onclick="clearResults()">消去</button>
@@ -47,7 +57,7 @@
   </div>
 
   <div class="box small">
-    <b>注意:</b> WebLLMはWebGPU対応ブラウザが必要です。初回ロードは長く、端末性能によって失敗します。完全無料ですが、モデルの通信量は大きいです。<br>
+    <b>注意:</b> WebLLMはWebGPU対応ブラウザが必要です。初回ロードは長く、端末性能によって失敗します。完全無料ですが、モデルの通信量は大きいです。8B/9B級は重いのでPC向けです。<br>
     <a href="./">トップへ戻る</a>
   </div>
 </div>
@@ -55,53 +65,137 @@
 <script type="module">
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-const MODEL_1B = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
-const MODEL_3B = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
+const MODELS = [
+  { key:'mini', group:'0. 内蔵', name:'チャピ子ミニ ルール型', type:'mini', note:'最軽量 / Kindle向け', preset:['safe','jp','tech'] },
+
+  { key:'smol135', group:'1. 超軽量 SmolLM2', name:'SmolLM2 135M q0f32', id:'SmolLM2-135M-Instruct-q0f32-MLC', note:'超軽量 / 精度は低め', preset:['safe'] },
+  { key:'smol360', group:'1. 超軽量 SmolLM2', name:'SmolLM2 360M q4f32', id:'SmolLM2-360M-Instruct-q4f32_1-MLC', note:'軽い / 試しやすい', preset:['safe'] },
+  { key:'smol17', group:'1. 超軽量 SmolLM2', name:'SmolLM2 1.7B q4f16', id:'SmolLM2-1.7B-Instruct-q4f16_1-MLC', note:'軽量だけど少し賢い', preset:['safe'] },
+
+  { key:'qwen25_05', group:'2. Qwen 2.5', name:'Qwen2.5 0.5B q4f16', id:'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', note:'軽量 / 日本語も比較的試しやすい', preset:['safe','jp'] },
+  { key:'qwen25_15', group:'2. Qwen 2.5', name:'Qwen2.5 1.5B q4f16', id:'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', note:'バランス型', preset:['safe','jp'] },
+  { key:'qwen25_3', group:'2. Qwen 2.5', name:'Qwen2.5 3B q4f16', id:'Qwen2.5-3B-Instruct-q4f16_1-MLC', note:'やや重い / 日本語比較用', preset:['jp'] },
+  { key:'qwen25_7', group:'2. Qwen 2.5', name:'Qwen2.5 7B q4f16', id:'Qwen2.5-7B-Instruct-q4f16_1-MLC', note:'重い / PC向け', preset:[] },
+
+  { key:'qwen3_06', group:'3. Qwen 3 / 3.5', name:'Qwen3 0.6B q4f16', id:'Qwen3-0.6B-q4f16_1-MLC', note:'軽量 / 新しめ', preset:['safe','jp'] },
+  { key:'qwen3_17', group:'3. Qwen 3 / 3.5', name:'Qwen3 1.7B q4f16', id:'Qwen3-1.7B-q4f16_1-MLC', note:'バランス型', preset:['jp'] },
+  { key:'qwen3_4', group:'3. Qwen 3 / 3.5', name:'Qwen3 4B q4f16', id:'Qwen3-4B-q4f16_1-MLC', note:'重め', preset:[] },
+  { key:'qwen3_8', group:'3. Qwen 3 / 3.5', name:'Qwen3 8B q4f16', id:'Qwen3-8B-q4f16_1-MLC', note:'かなり重い / PC向け', preset:[] },
+  { key:'qwen35_08', group:'3. Qwen 3 / 3.5', name:'Qwen3.5 0.8B q4f16', id:'Qwen3.5-0.8B-q4f16_1-MLC', note:'軽め / 新しめ', preset:['safe','jp'] },
+  { key:'qwen35_2', group:'3. Qwen 3 / 3.5', name:'Qwen3.5 2B q4f16', id:'Qwen3.5-2B-q4f16_1-MLC', note:'バランス型', preset:['jp'] },
+  { key:'qwen35_4', group:'3. Qwen 3 / 3.5', name:'Qwen3.5 4B q4f16', id:'Qwen3.5-4B-q4f16_1-MLC', note:'重め', preset:[] },
+  { key:'qwen35_9', group:'3. Qwen 3 / 3.5', name:'Qwen3.5 9B q4f16', id:'Qwen3.5-9B-q4f16_1-MLC', note:'かなり重い / PC向け', preset:[] },
+
+  { key:'coder05', group:'4. Qwen Coder', name:'Qwen2.5 Coder 0.5B q4f16', id:'Qwen2.5-Coder-0.5B-Instruct-q4f16_1-MLC', note:'コード/技術向け軽量', preset:['tech','safe'] },
+  { key:'coder15', group:'4. Qwen Coder', name:'Qwen2.5 Coder 1.5B q4f16', id:'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC', note:'コード/技術向け', preset:['tech'] },
+
+  { key:'llama1', group:'5. Llama / Hermes', name:'Llama 3.2 1B q4f16', id:'Llama-3.2-1B-Instruct-q4f16_1-MLC', note:'軽量 / 汎用', preset:['safe'] },
+  { key:'llama3', group:'5. Llama / Hermes', name:'Llama 3.2 3B q4f16', id:'Llama-3.2-3B-Instruct-q4f16_1-MLC', note:'汎用 / やや重い', preset:[] },
+  { key:'hermes3_3b', group:'5. Llama / Hermes', name:'Hermes 3 Llama 3.2 3B q4f16', id:'Hermes-3-Llama-3.2-3B-q4f16_1-MLC', note:'会話寄り / やや重い', preset:[] },
+  { key:'llama8', group:'5. Llama / Hermes', name:'Llama 3.1 8B q4f16 1k', id:'Llama-3.1-8B-Instruct-q4f16_1-MLC-1k', note:'重い / PC向け', preset:[] },
+
+  { key:'gemma3_1', group:'6. Gemma', name:'Gemma3 1B q4f16', id:'gemma3-1b-it-q4f16_1-MLC', note:'軽量 / Google系', preset:['safe','jp'] },
+  { key:'gemma2_2', group:'6. Gemma', name:'Gemma2 2B q4f16 1k', id:'gemma-2-2b-it-q4f16_1-MLC-1k', note:'バランス型', preset:['jp'] },
+  { key:'gemma2_jpn', group:'6. Gemma', name:'Gemma2 2B JPN q4f16', id:'gemma-2-2b-jpn-it-q4f16_1-MLC', note:'日本語寄り', preset:['jp'] },
+  { key:'gemma2_9', group:'6. Gemma', name:'Gemma2 9B q4f16', id:'gemma-2-9b-it-q4f16_1-MLC', note:'かなり重い / PC向け', preset:[] },
+
+  { key:'phi35_1k', group:'7. Phi', name:'Phi 3.5 mini q4f16 1k', id:'Phi-3.5-mini-instruct-q4f16_1-MLC-1k', note:'技術説明向け / 比較的軽い', preset:['tech','safe'] },
+  { key:'phi35', group:'7. Phi', name:'Phi 3.5 mini q4f16', id:'Phi-3.5-mini-instruct-q4f16_1-MLC', note:'技術説明向け', preset:['tech'] },
+  { key:'phi4', group:'7. Phi', name:'Phi 4 mini q4f16', id:'Phi-4-mini-instruct-q4f16_1-MLC', note:'技術/推論寄り / 重め', preset:['tech'] },
+
+  { key:'mistral', group:'8. Mistral / 数学 / DeepSeek / OLMo', name:'Mistral 7B v0.3 q4f16', id:'Mistral-7B-Instruct-v0.3-q4f16_1-MLC', note:'重い / PC向け', preset:[] },
+  { key:'openhermes', group:'8. Mistral / 数学 / DeepSeek / OLMo', name:'OpenHermes 2.5 Mistral 7B q4f16', id:'OpenHermes-2.5-Mistral-7B-q4f16_1-MLC', note:'会話寄り / 重い', preset:[] },
+  { key:'wizardmath', group:'8. Mistral / 数学 / DeepSeek / OLMo', name:'WizardMath 7B q4f16', id:'WizardMath-7B-V1.1-q4f16_1-MLC', note:'数学寄り / 重い', preset:[] },
+  { key:'deepseek7', group:'8. Mistral / 数学 / DeepSeek / OLMo', name:'DeepSeek R1 Distill Qwen 7B q4f16', id:'DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC', note:'推論寄り / 重い', preset:[] },
+  { key:'olmo1', group:'8. Mistral / 数学 / DeepSeek / OLMo', name:'OLMo 2 1B q4f16', id:'OLMo-2-0425-1B-Instruct-q4f16_1-MLC', note:'軽量オープン系', preset:['safe'] },
+  { key:'olmo7', group:'8. Mistral / 数学 / DeepSeek / OLMo', name:'OLMo 2 7B q4f16', id:'OLMo-2-1124-7B-Instruct-q4f16_1-MLC', note:'重い / PC向け', preset:[] }
+];
+
 let engine = null;
 let currentModel = "";
 let answers = [];
 
+renderModelList();
+selectPreset('safe');
+
+function renderModelList(){
+  const box = document.getElementById('modelList');
+  let html = '';
+  let lastGroup = '';
+  for (const m of MODELS) {
+    if (m.group !== lastGroup) {
+      html += '<h3>' + esc(m.group) + '</h3>';
+      lastGroup = m.group;
+    }
+    html += '<div class="modelRow">';
+    html += '<label><input type="checkbox" class="modelCheck" data-key="' + esc(m.key) + '"> ' + esc(m.name);
+    html += '<span class="tag">' + (m.type === 'mini' ? '内蔵' : 'WebLLM') + '</span></label>';
+    html += '<div class="tiny">' + esc(m.note || '') + (m.id ? '<br>' + esc(m.id) : '') + '</div>';
+    html += '</div>';
+  }
+  box.innerHTML = html;
+}
+
+window.selectPreset = function(kind){
+  const checks = document.querySelectorAll('.modelCheck');
+  checks.forEach(c => {
+    const m = getModel(c.getAttribute('data-key'));
+    if (kind === 'none') c.checked = false;
+    else if (kind === 'all') c.checked = true;
+    else c.checked = !!(m && m.preset && m.preset.indexOf(kind) >= 0);
+  });
+  if (kind === 'all') setStatus('全部選択しました。重いモデルが多いのでPC推奨です。');
+  else setStatus('選択しました: ' + kind);
+};
+
 window.askSelected = async function(){
   const prompt = document.getElementById('prompt').value.trim();
   if (!prompt) return setStatus('質問が空です');
+  const selected = selectedModels();
+  if (!selected.length) return setStatus('モデルを選んでください');
+
   answers = [];
   renderResults();
 
-  if (document.getElementById('mMini').checked) {
-    addAnswer('チャピ子ミニ', miniAnswer(prompt));
+  for (const model of selected) {
+    if (model.type === 'mini') {
+      addAnswer(model.name, miniAnswer(prompt));
+    } else {
+      await askWebLLM(model, prompt);
+    }
   }
-
-  if (document.getElementById('mLlama1').checked) {
-    await askWebLLM('WebLLM Llama 3.2 1B', MODEL_1B, prompt);
-  }
-
-  if (document.getElementById('mLlama3').checked) {
-    await askWebLLM('WebLLM Llama 3.2 3B', MODEL_3B, prompt);
-  }
-
   setStatus('完了');
 };
 
-async function askWebLLM(label, modelId, prompt) {
+function selectedModels(){
+  const arr = [];
+  document.querySelectorAll('.modelCheck').forEach(c => {
+    if (c.checked) arr.push(getModel(c.getAttribute('data-key')));
+  });
+  return arr.filter(Boolean);
+}
+function getModel(key){ return MODELS.find(m => m.key === key); }
+
+async function askWebLLM(model, prompt) {
   if (!navigator.gpu) {
-    addAnswer(label, 'このブラウザはWebGPUに未対応です。PCのChrome/Edge/Safariなどで試してください。');
+    addAnswer(model.name, 'このブラウザはWebGPUに未対応です。PCのChrome/Edge/Safariなどで試してください。');
     return;
   }
   try {
-    setStatus(label + ' をロード中... 初回はかなり時間がかかります');
+    setStatus(model.name + ' をロード中... 初回はかなり時間がかかります');
     if (!engine) {
       engine = new webllm.MLCEngine({ initProgressCallback: function(p){
-        setStatus(label + ' 読み込み中: ' + (p.text || JSON.stringify(p)));
+        setStatus(model.name + ' 読み込み中: ' + (p.text || JSON.stringify(p)));
       }});
     }
-    if (currentModel !== modelId) {
-      await engine.reload(modelId);
-      currentModel = modelId;
+    if (currentModel !== model.id) {
+      await engine.reload(model.id);
+      currentModel = model.id;
     }
 
-    setStatus(label + ' が回答中...');
+    setStatus(model.name + ' が回答中...');
     const messages = [
-      { role:'system', content:'あなたはチャピ子です。日本語で、結論から、短く、読みやすく答えてください。' },
+      { role:'system', content:'あなたはチャピ子です。日本語で、結論から、短く、読みやすく答えてください。技術質問では現場で使える具体例を入れてください。' },
       { role:'user', content: prompt }
     ];
     const reply = await engine.chat.completions.create({
@@ -110,21 +204,20 @@ async function askWebLLM(label, modelId, prompt) {
       max_tokens: 512
     });
     const text = reply && reply.choices && reply.choices[0] && reply.choices[0].message ? reply.choices[0].message.content : '(返答なし)';
-    addAnswer(label, text);
+    addAnswer(model.name, text);
   } catch(e) {
-    addAnswer(label, 'エラー: ' + (e && e.message ? e.message : String(e)));
+    addAnswer(model.name, 'エラー: ' + (e && e.message ? e.message : String(e)) + '\n\n別の軽いモデルを試してください。');
   }
 }
 
 function miniAnswer(q) {
   const nq = q.toLowerCase();
-  if (has(nq, ['無料','ただ','free'])) return '無料で横断するなら、ブラウザ内で動くWebLLM系を使うのが一番安全です。APIキーも課金も不要ですが、端末性能は必要です。';
+  if (has(nq, ['無料','ただ','free'])) return '無料で横断するなら、APIではなくブラウザ内で動くWebLLM系を使うのが一番安全です。モデルは外部から取得し、推論は端末内で行います。';
   if (has(nq, ['kindle','キンドル'])) return 'KindleではガチLLMはかなり厳しいです。Kindleは簡易LLM、PC/スマホはWebLLM横断、という分担が現実的です。';
-  if (has(nq, ['api','キー','課金'])) return 'このページのWebLLM方式ならAPIキーは不要です。モデルは外部からダウンロードしますが、推論はブラウザ内で行います。';
-  if (has(nq, ['横断','比較','複数'])) return '複数モデルに同じ質問を投げて、回答を並べて比較できます。ただしWebLLMは同時起動ではなく、順番にロードして聞く方式が安定です。';
+  if (has(nq, ['api','キー','課金'])) return 'このページのWebLLM方式ならAPIキーは不要です。ただしモデルの初回ダウンロードが大きく、WebGPU対応ブラウザが必要です。';
+  if (has(nq, ['横断','比較','複数'])) return '複数モデルに同じ質問を順番に投げて、回答を並べて比較できます。重いモデルを全部選ぶとかなり時間がかかります。';
   return 'チャピ子ミニの答えです。本格回答はWebLLMモデルを選んで「選択モデルに聞く」を押してください。';
 }
-
 function has(s, arr) {
   for (let i=0; i<arr.length; i++) if (s.indexOf(arr[i]) >= 0) return true;
   return false;
@@ -132,17 +225,16 @@ function has(s, arr) {
 
 window.summarizeResults = function(){
   if (!answers.length) return setStatus('まとめる回答がありません');
-  let joined = answers.map(a => '【' + a.name + '】\n' + a.text).join('\n\n');
   let summary = '横断結果まとめ\n\n';
-  summary += '共通して言えそうなこと:\n';
-  summary += '- ' + pickCommon(joined) + '\n\n';
-  summary += '使い分け:\n';
-  summary += '- チャピ子ミニ: 速いが浅い\n';
-  summary += '- WebLLM 1B: 軽めで試しやすい\n';
-  summary += '- WebLLM 3B: 重いが少し賢い\n';
+  summary += '見るポイント:\n';
+  summary += '- 速さ: 小さいモデルほど有利\n';
+  summary += '- 日本語: Qwen / Gemma JPN 系を比較\n';
+  summary += '- 技術説明: Phi / Qwen Coder を比較\n';
+  summary += '- 汎用回答: Llama / Gemma / Qwen を比較\n\n';
+  summary += 'おすすめ判断:\n';
+  summary += pickCommon(answers.map(a => a.text).join('\n'));
   addAnswer('チャピ子まとめ', summary);
 };
-
 function pickCommon(text) {
   if (text.indexOf('Kindle') >= 0 || text.indexOf('キンドル') >= 0) return 'Kindleでは軽量版、PC/スマホではWebLLM版に分けるのが現実的です。';
   if (text.indexOf('無料') >= 0) return '無料にするなら、APIではなくブラウザ内ローカル推論を使うのが安全です。';
@@ -153,7 +245,6 @@ function addAnswer(name, text) {
   answers.push({ name, text });
   renderResults();
 }
-
 function renderResults() {
   const box = document.getElementById('results');
   if (!answers.length) {
@@ -162,13 +253,11 @@ function renderResults() {
   }
   box.innerHTML = answers.map(a => '<div class="result"><div class="modelName">' + esc(a.name) + '</div>' + esc(a.text) + '</div>').join('');
 }
-
 window.clearResults = function(){
   answers = [];
   renderResults();
   setStatus('消去しました');
 };
-
 function setStatus(s){ document.getElementById('status').textContent = s; }
 function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
