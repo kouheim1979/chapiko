@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>簡易LLM チャピ子ミニ</title>
+<style>
+  html, body { margin:0; padding:0; background:#fff; color:#000; }
+  body { font-family: sans-serif; font-size: 21px; line-height: 1.55; }
+  #app { max-width: 900px; margin: 0 auto; padding: 12px; }
+  h1 { font-size: 30px; margin: 8px 0 12px; }
+  h2 { font-size: 23px; margin: 10px 0 6px; }
+  .box { border: 2px solid #000; padding: 12px; margin: 10px 0; }
+  textarea, input, button { font-size: 21px; color:#000; background:#fff; border:2px solid #000; box-sizing:border-box; }
+  textarea { width:100%; height:110px; padding:8px; }
+  input { width:100%; padding:8px; margin:4px 0; }
+  button { padding:10px 14px; margin:5px 5px 5px 0; font-weight:bold; }
+  .small { font-size: 15px; }
+  .msg { border-top:1px solid #000; padding:10px 0; white-space:pre-wrap; word-break:break-word; }
+  .role { font-size:15px; font-weight:bold; }
+  .user .role:after { content:'あなた'; }
+  .bot .role:after { content:'チャピ子ミニ'; }
+  a { color:#000; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>簡易LLM チャピ子ミニ</h1>
+
+  <div class="box small">
+    これは本物の大規模LLMではありません。GitHub Pagesだけで動く、API不要・無料の簡易チャットです。ルール検索、キーワード一致、端末内の学習メモで返答します。
+  </div>
+
+  <div class="box">
+    <textarea id="q" placeholder="ここに質問を書く"></textarea>
+    <button onclick="ask()">答える</button>
+    <button onclick="shortAsk()">短く</button>
+    <button onclick="easyAsk()">やさしく</button>
+    <button onclick="clearChat()">履歴消去</button>
+    <div id="status" class="small">準備OK</div>
+  </div>
+
+  <div id="chat" class="box"></div>
+
+  <div class="box">
+    <h2>この端末だけに学習させる</h2>
+    <div class="small">質問のキーワードと答えを保存します。保存先はこのブラウザの localStorage です。</div>
+    <input id="teachK" placeholder="キーワード 例: Kindle Unlimited">
+    <textarea id="teachA" placeholder="その時の答え"></textarea>
+    <button onclick="teach()">学習</button>
+    <button onclick="clearMemory()">学習メモ消去</button>
+  </div>
+
+  <div class="box small">
+    <a href="./">トップへ戻る</a>
+  </div>
+</div>
+
+<script>
+var chat = [];
+var learned = [];
+
+var KB = [
+  {
+    keys:['api','有料','料金','課金','openai'],
+    ans:'OpenAI APIを使う方式は、ChatGPTの月額とは別料金です。無料にしたい場合はAPIを使わず、このページのような簡易チャットにする必要があります。'
+  },
+  {
+    keys:['kindle','ブラウザ','動かない','重い'],
+    ans:'Kindleのブラウザは古くて重いJavaScriptが苦手です。ChatGPT本体をそのまま動かすより、軽いHTMLだけで表示する方が安定します。'
+  },
+  {
+    keys:['kindle unlimited','unlimited','読書','本'],
+    ans:'Kindle Unlimitedの読書画面の中に別のWeb画面を重ねることは基本的にできません。読む画面とブラウザ画面を切り替える形になります。'
+  },
+  {
+    keys:['llm','簡易llm','大規模','モデル'],
+    ans:'ここで作れるのは本物の大規模LLMではなく、軽い疑似LLMです。キーワード検索、ルール、学習メモを使って、それっぽく返答します。'
+  },
+  {
+    keys:['github','pages','無料','公開'],
+    ans:'GitHub Pagesなら静的HTMLとJavaScriptを無料で公開できます。ただしサーバー処理や秘密のAPIキー保存はできません。'
+  },
+  {
+    keys:['チャピ子','chapiko','何'],
+    ans:'チャピ子ミニは、Kindleでも開きやすい軽量チャットです。本物のChatGPTではなく、端末内で動く簡易版です。'
+  },
+  {
+    keys:['学習','覚える','保存'],
+    ans:'下の学習欄にキーワードと答えを入れると、このブラウザだけに保存します。別端末には同期されません。'
+  },
+  {
+    keys:['こんにちは','おはよう','こんばんは'],
+    ans:'こんにちは。チャピ子ミニです。APIなしで動く簡易版なので、難しい質問は苦手ですが、軽く答えます。'
+  }
+];
+
+(function(){
+  load();
+  render();
+})();
+
+function ask(){
+  var q = trim(document.getElementById('q').value);
+  if (!q) { setStatus('質問が空です'); return; }
+  document.getElementById('q').value = '';
+  add('user', q);
+  var a = answer(q);
+  add('bot', a);
+  setStatus('準備OK');
+}
+
+function shortAsk(){
+  var el = document.getElementById('q');
+  el.value = '短く答えて。 ' + el.value;
+  ask();
+}
+
+function easyAsk(){
+  var el = document.getElementById('q');
+  el.value = '中学生にもわかるように。 ' + el.value;
+  ask();
+}
+
+function answer(q){
+  var best = findBest(q);
+  if (best.score >= 2) {
+    return shapeAnswer(q, best.ans, best.from);
+  }
+
+  if (contains(q, ['なぜ','理由'])) {
+    return '理由は、Kindle側のブラウザが重いWebアプリを処理するのが苦手だからです。無料でやるなら、できるだけ静的HTMLに寄せるのが安全です。';
+  }
+  if (contains(q, ['どう','方法','やり方'])) {
+    return '方法は大きく3つです。1つ目はAPIを使う。2つ目は画面共有する。3つ目はこのページのように簡易チャットを作る。無料で軽いのは3つ目です。';
+  }
+  if (contains(q, ['できる','可能'])) {
+    return '完全なChatGPTの代わりは難しいですが、簡単な受け答えなら可能です。GitHub Pagesだけで動く範囲なら、ルール型の簡易LLMになります。';
+  }
+
+  return 'ごめんなさい。チャピ子ミニではまだ分かりません。下の「学習」欄にキーワードと答えを登録すると、次から近い質問に答えられます。';
+}
+
+function findBest(q){
+  var all = [];
+  var i;
+  for (i=0; i<learned.length; i++) {
+    all.push({ keys:[learned[i].k], ans:learned[i].a, from:'学習メモ' });
+  }
+  for (i=0; i<KB.length; i++) all.push(KB[i]);
+
+  var best = { score:0, ans:'', from:'' };
+  for (i=0; i<all.length; i++) {
+    var sc = score(q, all[i].keys || []);
+    if (sc > best.score) best = { score:sc, ans:all[i].ans, from:all[i].from || '内蔵知識' };
+  }
+  return best;
+}
+
+function score(q, keys){
+  var nq = norm(q);
+  var s = 0;
+  for (var i=0; i<keys.length; i++) {
+    var k = norm(keys[i]);
+    if (!k) continue;
+    if (nq.indexOf(k) >= 0) s += 3;
+    else s += charOverlap(nq, k);
+  }
+  return s;
+}
+
+function charOverlap(a, b){
+  var s = 0;
+  var seen = {};
+  for (var i=0; i<b.length; i++) {
+    var c = b.charAt(i);
+    if (seen[c]) continue;
+    seen[c] = true;
+    if (a.indexOf(c) >= 0) s += 0.25;
+  }
+  return s;
+}
+
+function shapeAnswer(q, ans, from){
+  if (contains(q, ['短く','一言'])) return ans.split('。')[0] + '。';
+  if (contains(q, ['やさしく','中学生','簡単'])) return '簡単に言うと、' + ans;
+  return ans + '\n\n[' + from + ']';
+}
+
+function teach(){
+  var k = trim(document.getElementById('teachK').value);
+  var a = trim(document.getElementById('teachA').value);
+  if (!k || !a) { setStatus('キーワードと答えを両方入れてください'); return; }
+  learned.push({ k:k, a:a });
+  save();
+  document.getElementById('teachK').value = '';
+  document.getElementById('teachA').value = '';
+  setStatus('学習しました');
+}
+
+function add(role, text){
+  chat.push({ role:role, text:text });
+  if (chat.length > 20) chat = chat.slice(chat.length - 20);
+  save();
+  render();
+}
+
+function render(){
+  var box = document.getElementById('chat');
+  var html = '';
+  if (!chat.length) html = '<div class="small">ここに会話が出ます。</div>';
+  for (var i=0; i<chat.length; i++) {
+    var c = chat[i];
+    html += '<div class="msg ' + (c.role === 'user' ? 'user' : 'bot') + '"><div class="role"></div>' + esc(c.text) + '</div>';
+  }
+  box.innerHTML = html;
+}
+
+function clearChat(){ chat = []; save(); render(); setStatus('履歴を消しました'); }
+function clearMemory(){ learned = []; save(); setStatus('学習メモを消しました'); }
+function setStatus(s){ document.getElementById('status').innerHTML = esc(s); }
+function save(){
+  try {
+    localStorage.setItem('chapiko_mini_chat', JSON.stringify(chat));
+    localStorage.setItem('chapiko_mini_learned', JSON.stringify(learned));
+  } catch(e) {}
+}
+function load(){
+  try {
+    chat = JSON.parse(localStorage.getItem('chapiko_mini_chat') || '[]');
+    learned = JSON.parse(localStorage.getItem('chapiko_mini_learned') || '[]');
+  } catch(e) { chat=[]; learned=[]; }
+}
+function norm(s){ return String(s || '').toLowerCase().replace(/[\s　、。！？!?,.・「」『』（）()\[\]]/g, ''); }
+function trim(s){ return String(s || '').replace(/^\s+|\s+$/g, ''); }
+function contains(s, arr){
+  var n = norm(s);
+  for (var i=0; i<arr.length; i++) if (n.indexOf(norm(arr[i])) >= 0) return true;
+  return false;
+}
+function esc(s){
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
