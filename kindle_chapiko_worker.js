@@ -76,6 +76,8 @@ const HTML = `<!doctype html>
 </div>
 
 <script>
+var historyList = [];
+
 (function(){
   loadState();
   render();
@@ -85,8 +87,6 @@ const HTML = `<!doctype html>
     if ((e.ctrlKey || e.metaKey) && e.keyCode === 13) sendMsg();
   };
 })();
-
-var historyList = [];
 
 function setStatus(t){ document.getElementById('status').innerHTML = escapeHtml(t); }
 function getCode(){ return document.getElementById('code').value || ''; }
@@ -195,6 +195,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
     if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       return new Response(HTML, {
         headers: {
@@ -208,7 +212,7 @@ export default {
       return handleChat(request, env);
     }
 
-    return new Response('Not Found', { status: 404 });
+    return new Response('Not Found', { status: 404, headers: corsHeaders() });
   }
 };
 
@@ -300,12 +304,22 @@ function extractText(data) {
   return parts.join('\n').trim();
 }
 
+function corsHeaders() {
+  return {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'Content-Type',
+    'access-control-max-age': '86400'
+  };
+}
+
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj, null, 2), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store'
+      'cache-control': 'no-store',
+      ...corsHeaders()
     }
   });
 }
