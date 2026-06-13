@@ -8,6 +8,35 @@ Kindleで見やすい入口ページです。
 https://kouheim1979.github.io/chapiko/
 ```
 
+## 自分専用LLM チャピ子
+
+```text
+https://kouheim1979.github.io/chapiko/my-hf-llm.html
+```
+
+Hugging Face Hubに置いたWebLLM/MLC形式モデルを、GitHub Pagesから読み込んでブラウザ内で動かすページです。
+
+構成:
+
+```text
+Hugging Face Hub
+→ 自分用モデル/量子化モデルを置く
+
+GitHub Pages
+→ チャピ子画面
+
+WebLLM
+→ PC/スマホのブラウザ内で動かす
+```
+
+注意:
+
+- Hugging Faceに置くモデルはWebLLM/MLC形式が必要です。
+- GGUFをそのまま置いただけでは動きません。
+- ベースライブラリは、モデルの元になった系統に合わせます。
+- WebGPU対応ブラウザが必要です。
+- Kindleでは厳しいのでPC/スマホ向けです。
+
 ## 無料LLM横断 チャピ子ハブ
 
 ```text
@@ -84,6 +113,7 @@ VDO.Ninja の `push` と `view` のリンクを作ります。
 
 ```text
 index.html                         入口ページ
+my-hf-llm.html                     自分専用Hugging Faceモデル用ページ
 free-llm-hub.html                  無料LLM横断ページ
 simple-llm.html                    APIなし簡易チャット
 .github/workflows/pages.yml        GitHub Pages自動デプロイ
