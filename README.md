@@ -8,6 +8,43 @@ Kindleで見やすい入口ページです。
 https://kouheim1979.github.io/chapiko/
 ```
 
+## 外部サーバLLM チャピ子
+
+```text
+https://kouheim1979.github.io/chapiko/external-server-llm.html
+```
+
+モデルと推論は外部サーバ、GitHub Pagesは画面だけにする方式です。
+
+構成:
+
+```text
+GitHub Pages
+external-server-llm.html
+  ↓ POST /chat
+Hugging Face Space
+FastAPI + llama.cpp
+  ↓
+Hugging Face Model Repo
+GGUFモデル
+```
+
+Hugging Face Space側のテンプレート:
+
+```text
+hf-space-template/app.py
+hf-space-template/requirements.txt
+hf-space-template/Dockerfile
+hf-space-template/README.md
+```
+
+注意:
+
+- 無料CPU Spaceは遅いです。
+- 無料Spaceは未使用時にスリープします。
+- 小型GGUFモデル推奨です。
+- 初回リクエストはモデルのダウンロードとロードで時間がかかります。
+
 ## 自分専用LLM チャピ子
 
 ```text
@@ -113,6 +150,8 @@ VDO.Ninja の `push` と `view` のリンクを作ります。
 
 ```text
 index.html                         入口ページ
+external-server-llm.html           外部サーバLLM用の画面
+hf-space-template/                 Hugging Face Space用テンプレート
 my-hf-llm.html                     自分専用Hugging Faceモデル用ページ
 free-llm-hub.html                  無料LLM横断ページ
 simple-llm.html                    APIなし簡易チャット
