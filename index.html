@@ -3,36 +3,84 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>チャピ子 表示中継</title>
+<title>チャピ子 オンライン表示中継</title>
 <style>
   html, body { margin:0; padding:0; background:#fff; color:#000; }
-  body { font-family: serif; font-size: 22px; line-height: 1.55; }
-  #app { max-width: 900px; margin: 0 auto; padding: 12px; }
-  h1 { font-size: 30px; margin: 8px 0 12px; }
-  .box { border: 2px solid #000; padding: 12px; margin: 10px 0; }
-  .btn { display:block; border: 3px solid #000; padding: 14px; margin: 12px 0; color:#000; text-decoration:none; font-weight:bold; text-align:center; font-size: 24px; }
-  .small { font-size: 16px; }
-  iframe { width:100%; height: 72vh; border: 2px solid #000; background:#fff; }
+  body { font-family: sans-serif; font-size:22px; line-height:1.55; }
+  #app { max-width:900px; margin:0 auto; padding:12px; }
+  h1 { font-size:30px; margin:8px 0 12px; }
+  .box { border:2px solid #000; padding:12px; margin:10px 0; }
+  label { display:block; font-size:16px; margin-top:8px; }
+  input { width:100%; box-sizing:border-box; font-size:22px; padding:8px; border:2px solid #000; }
+  button, a.btn { display:block; width:100%; box-sizing:border-box; border:3px solid #000; background:#fff; color:#000; padding:14px; margin:12px 0; text-align:center; text-decoration:none; font-size:24px; font-weight:bold; }
+  .small { font-size:16px; }
+  .url { font-family:monospace; font-size:14px; word-break:break-all; border:1px solid #000; padding:8px; margin:6px 0; }
 </style>
 </head>
 <body>
 <div id="app">
-  <h1>チャピ子 表示中継</h1>
+  <h1>チャピ子 オンライン表示中継</h1>
 
   <div class="box">
-    <a class="btn" href="https://chatgpt.com/" target="_self">チャピ子を開く</a>
-    <a class="btn" href="https://chatgpt.com/?model=auto" target="_self">新しいチャットを開く</a>
     <div class="small">
-      Kindleでこのページをブックマークしておくための軽い中継ページです。APIキーや中継サーバーは使いません。
+      PCやスマホでログイン済みのChatGPT画面を共有し、Kindle側では表示だけ見ます。ローカルサーバーは使いません。オンラインサービスは VDO.Ninja を使います。
     </div>
+    <label>部屋ID</label>
+    <input id="room" placeholder="例: CHAPIKO123">
+    <button onclick="makeRoom()">部屋IDを作る</button>
   </div>
 
   <div class="box">
-    <div class="small">
-      下に画面が出ればそのまま使えます。出ない場合は、上の「チャピ子を開く」を押してください。
-    </div>
-    <iframe src="https://chatgpt.com/" title="ChatGPT"></iframe>
+    <h2>1. 送信側 PC/スマホ</h2>
+    <div class="small">ログイン済みChatGPTを開いている端末で押します。画面共有の選択画面で、ChatGPTのタブかウィンドウを選びます。</div>
+    <a id="sendLink" class="btn" href="#">送信側を開く</a>
+    <div id="sendUrl" class="url"></div>
+  </div>
+
+  <div class="box">
+    <h2>2. 表示側 Kindle</h2>
+    <div class="small">Kindleでこのリンクを開くと、送信側の画面を見るだけになります。</div>
+    <a id="viewLink" class="btn" href="#">表示側を開く</a>
+    <div id="viewUrl" class="url"></div>
+  </div>
+
+  <div class="box small">
+    Kindleで映らない場合は、KindleのブラウザがWebRTC表示に対応していない可能性があります。その場合、この方式ではなく「表示を画像にして配るサービス」が必要です。
   </div>
 </div>
+
+<script>
+var roomEl = document.getElementById('room');
+roomEl.value = localStorage.getItem('chapiko_vdo_room') || ('CHAPIKO' + rand(5));
+roomEl.oninput = updateLinks;
+updateLinks();
+
+function makeRoom(){
+  roomEl.value = 'CHAPIKO' + rand(6);
+  updateLinks();
+}
+
+function updateLinks(){
+  var room = clean(roomEl.value) || 'CHAPIKO';
+  localStorage.setItem('chapiko_vdo_room', room);
+
+  var sendUrl = 'https://vdo.ninja/?push=' + encodeURIComponent(room) + '&screenshare&noaudio&webcam=0';
+  var viewUrl = 'https://vdo.ninja/?view=' + encodeURIComponent(room) + '&cleanoutput&autoplay&noaudio';
+
+  document.getElementById('sendLink').href = sendUrl;
+  document.getElementById('viewLink').href = viewUrl;
+  document.getElementById('sendUrl').innerHTML = escapeHtml(sendUrl);
+  document.getElementById('viewUrl').innerHTML = escapeHtml(viewUrl);
+}
+
+function rand(n){
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var s = '';
+  for (var i=0; i<n; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+  return s;
+}
+function clean(s){ return String(s || '').replace(/[^A-Za-z0-9_-]/g, '').toUpperCase(); }
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
 </body>
 </html>
