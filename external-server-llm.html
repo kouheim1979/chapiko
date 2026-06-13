@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>外部サーバLLM チャピ子</title>
+<style>
+  html, body { margin:0; padding:0; background:#fff; color:#000; }
+  body { font-family:sans-serif; font-size:20px; line-height:1.55; }
+  #app { max-width:980px; margin:0 auto; padding:12px; }
+  h1 { font-size:30px; margin:8px 0 12px; }
+  h2 { font-size:23px; margin:10px 0 6px; }
+  .box { border:2px solid #000; padding:12px; margin:10px 0; }
+  .warn { border:2px dashed #000; padding:10px; margin:10px 0; }
+  input, textarea, button { width:100%; box-sizing:border-box; font-size:20px; border:2px solid #000; background:#fff; color:#000; padding:8px; margin:5px 0; }
+  textarea { height:120px; }
+  button { font-weight:bold; padding:12px; }
+  .small { font-size:15px; }
+  .result { white-space:pre-wrap; word-break:break-word; border-top:1px solid #000; padding-top:10px; }
+  a { color:#000; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>外部サーバLLM チャピ子</h1>
+
+  <div class="box small">
+    モデルと推論は外部サーバ、ここはブラウザ画面だけです。Hugging Face Spaceなどに置いたAPIへ接続します。
+  </div>
+
+  <div class="box warn small">
+    無料のHugging Face Spaceはスリープします。最初の1回は起動に時間がかかります。LLMは小型GGUF推奨です。
+  </div>
+
+  <div class="box">
+    <h2>1. 外部サーバ設定</h2>
+    <label>チャットAPI URL</label>
+    <input id="apiUrl" placeholder="例: https://yourname-chapiko-llm.hf.space/chat">
+    <button onclick="saveSettings()">設定を保存</button>
+    <button onclick="healthCheck()">接続テスト</button>
+    <div id="status" class="small">準備OK</div>
+  </div>
+
+  <div class="box">
+    <h2>2. チャピ子設定</h2>
+    <textarea id="systemPrompt">あなたはチャピ子です。日本語で、結論から、短く、読みやすく答えてください。Kouheiさん向けに、技術質問では現場のPLC・制御・ネットワークの例を入れてください。</textarea>
+  </div>
+
+  <div class="box">
+    <h2>3. 質問</h2>
+    <textarea id="message" placeholder="ここに質問を書く"></textarea>
+    <button onclick="ask()">聞く</button>
+    <button onclick="clearAnswer()">消去</button>
+  </div>
+
+  <div class="box">
+    <h2>回答 / エラー</h2>
+    <div id="answer" class="result">ここに回答が出ます。</div>
+  </div>
+
+  <div class="box small">
+    サーバ側は `POST /chat` で `{message, system}` を受け取り、`{reply}` を返す想定です。<br>
+    <a href="./">トップへ戻る</a>
+  </div>
+</div>
+
+<script>
+loadSettings();
+
+function loadSettings(){
+  document.getElementById('apiUrl').value = localStorage.getItem('chapiko_external_api_url') || '';
+  document.getElementById('systemPrompt').value = localStorage.getItem('chapiko_external_system_prompt') || document.getElementById('systemPrompt').value;
+}
+function saveSettings(){
+  localStorage.setItem('chapiko_external_api_url', val('apiUrl').trim());
+  localStorage.setItem('chapiko_external_system_prompt', val('systemPrompt'));
+  setStatus('保存しました');
+}
+async function healthCheck(){
+  saveSettings();
+  const base = val('apiUrl').trim().replace(/\/chat\/?$/, '');
+  if (!base) return showError('API URLが空です');
+  setStatus('接続テスト中...');
+  try {
+    const res = await fetch(base + '/health', { method:'GET' });
+    const text = await res.text();
+    showText('接続テスト結果:\nHTTP ' + res.status + '\n' + text);
+    setStatus(res.ok ? '接続OK' : '接続エラー');
+  } catch(e) {
+    showError('接続テストエラー:\n' + errMsg(e));
+    setStatus('接続エラー');
+  }
+}
+async function ask(){
+  saveSettings();
+  const url = val('apiUrl').trim();
+  const message = val('message').trim();
+  if (!url) return showError('API URLが空です');
+  if (!message) return showError('質問が空です');
+  setStatus('送信中... 無料Spaceは起動に時間がかかることがあります');
+  showText('送信中...');
+  try {
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ message: message, system: val('systemPrompt') })
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = JSON.parse(text); } catch(e) {}
+    if (!res.ok) throw new Error('HTTP ' + res.status + '\n' + text);
+    const reply = data && (data.reply || data.answer || data.text) ? (data.reply || data.answer || data.text) : text;
+    showText(reply);
+    setStatus('完了');
+  } catch(e) {
+    showError('送信エラー:\n' + errMsg(e) + '\n\n対処:\n1. Spaceが起動しているか確認\n2. API URL末尾が /chat か確認\n3. Space側CORS設定を確認\n4. 無料CPUなら初回起動を待つ');
+    setStatus('送信エラー');
+  }
+}
+function clearAnswer(){ showText('ここに回答が出ます。'); setStatus('消去しました'); }
+function val(id){ return document.getElementById(id).value; }
+function showText(s){ document.getElementById('answer').textContent = s; }
+function showError(s){ document.getElementById('answer').textContent = s; }
+function setStatus(s){ document.getElementById('status').textContent = s; }
+function errMsg(e){ return e && e.message ? e.message : String(e); }
+</script>
+</body>
+</html>
