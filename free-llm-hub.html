@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>無料LLM横断 チャピ子ハブ</title>
+<style>
+  html, body { margin:0; padding:0; background:#fff; color:#000; }
+  body { font-family: sans-serif; font-size: 20px; line-height: 1.55; }
+  #app { max-width: 980px; margin: 0 auto; padding: 12px; }
+  h1 { font-size: 30px; margin: 8px 0 12px; }
+  h2 { font-size: 23px; margin: 10px 0 6px; }
+  .box { border: 2px solid #000; padding: 12px; margin: 10px 0; }
+  textarea, button, select { font-size: 20px; color:#000; background:#fff; border:2px solid #000; box-sizing:border-box; }
+  textarea { width:100%; height:120px; padding:8px; }
+  button { padding:10px 14px; margin:5px 5px 5px 0; font-weight:bold; }
+  select { width:100%; padding:8px; margin:5px 0; }
+  label { display:block; margin:6px 0; }
+  .small { font-size: 15px; }
+  .result { border-top:1px solid #000; padding:10px 0; white-space:pre-wrap; word-break:break-word; }
+  .modelName { font-weight:bold; font-size:16px; }
+  a { color:#000; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>無料LLM横断 チャピ子ハブ</h1>
+
+  <div class="box small">
+    GitHub Pagesだけで動く無料LLM横断ページです。APIキーは使いません。WebLLMモデルは初回に大きなモデルをダウンロードします。PC/スマホ向けです。Kindleでは簡易LLMだけ使える想定です。
+  </div>
+
+  <div class="box">
+    <h2>質問</h2>
+    <textarea id="prompt" placeholder="ここに質問を書く"></textarea>
+    <label><input type="checkbox" id="mMini" checked> チャピ子ミニ ルール型</label>
+    <label><input type="checkbox" id="mLlama1"> WebLLM Llama 3.2 1B 無料ローカル</label>
+    <label><input type="checkbox" id="mLlama3"> WebLLM Llama 3.2 3B 無料ローカル</label>
+    <button onclick="askSelected()">選択モデルに聞く</button>
+    <button onclick="summarizeResults()">回答をまとめる</button>
+    <button onclick="clearResults()">消去</button>
+    <div id="status" class="small">準備OK</div>
+  </div>
+
+  <div id="results" class="box">
+    <div class="small">ここに回答が出ます。</div>
+  </div>
+
+  <div class="box small">
+    <b>注意:</b> WebLLMはWebGPU対応ブラウザが必要です。初回ロードは長く、端末性能によって失敗します。完全無料ですが、モデルの通信量は大きいです。<br>
+    <a href="./">トップへ戻る</a>
+  </div>
+</div>
+
+<script type="module">
+import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+const MODEL_1B = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+const MODEL_3B = "Llama-3.2-3B-Instruct-q4f16_1-MLC";
+let engine = null;
+let currentModel = "";
+let answers = [];
+
+window.askSelected = async function(){
+  const prompt = document.getElementById('prompt').value.trim();
+  if (!prompt) return setStatus('質問が空です');
+  answers = [];
+  renderResults();
+
+  if (document.getElementById('mMini').checked) {
+    addAnswer('チャピ子ミニ', miniAnswer(prompt));
+  }
+
+  if (document.getElementById('mLlama1').checked) {
+    await askWebLLM('WebLLM Llama 3.2 1B', MODEL_1B, prompt);
+  }
+
+  if (document.getElementById('mLlama3').checked) {
+    await askWebLLM('WebLLM Llama 3.2 3B', MODEL_3B, prompt);
+  }
+
+  setStatus('完了');
+};
+
+async function askWebLLM(label, modelId, prompt) {
+  if (!navigator.gpu) {
+    addAnswer(label, 'このブラウザはWebGPUに未対応です。PCのChrome/Edge/Safariなどで試してください。');
+    return;
+  }
+  try {
+    setStatus(label + ' をロード中... 初回はかなり時間がかかります');
+    if (!engine) {
+      engine = new webllm.MLCEngine({ initProgressCallback: function(p){
+        setStatus(label + ' 読み込み中: ' + (p.text || JSON.stringify(p)));
+      }});
+    }
+    if (currentModel !== modelId) {
+      await engine.reload(modelId);
+      currentModel = modelId;
+    }
+
+    setStatus(label + ' が回答中...');
+    const messages = [
+      { role:'system', content:'あなたはチャピ子です。日本語で、結論から、短く、読みやすく答えてください。' },
+      { role:'user', content: prompt }
+    ];
+    const reply = await engine.chat.completions.create({
+      messages: messages,
+      temperature: 0.7,
+      max_tokens: 512
+    });
+    const text = reply && reply.choices && reply.choices[0] && reply.choices[0].message ? reply.choices[0].message.content : '(返答なし)';
+    addAnswer(label, text);
+  } catch(e) {
+    addAnswer(label, 'エラー: ' + (e && e.message ? e.message : String(e)));
+  }
+}
+
+function miniAnswer(q) {
+  const nq = q.toLowerCase();
+  if (has(nq, ['無料','ただ','free'])) return '無料で横断するなら、ブラウザ内で動くWebLLM系を使うのが一番安全です。APIキーも課金も不要ですが、端末性能は必要です。';
+  if (has(nq, ['kindle','キンドル'])) return 'KindleではガチLLMはかなり厳しいです。Kindleは簡易LLM、PC/スマホはWebLLM横断、という分担が現実的です。';
+  if (has(nq, ['api','キー','課金'])) return 'このページのWebLLM方式ならAPIキーは不要です。モデルは外部からダウンロードしますが、推論はブラウザ内で行います。';
+  if (has(nq, ['横断','比較','複数'])) return '複数モデルに同じ質問を投げて、回答を並べて比較できます。ただしWebLLMは同時起動ではなく、順番にロードして聞く方式が安定です。';
+  return 'チャピ子ミニの答えです。本格回答はWebLLMモデルを選んで「選択モデルに聞く」を押してください。';
+}
+
+function has(s, arr) {
+  for (let i=0; i<arr.length; i++) if (s.indexOf(arr[i]) >= 0) return true;
+  return false;
+}
+
+window.summarizeResults = function(){
+  if (!answers.length) return setStatus('まとめる回答がありません');
+  let joined = answers.map(a => '【' + a.name + '】\n' + a.text).join('\n\n');
+  let summary = '横断結果まとめ\n\n';
+  summary += '共通して言えそうなこと:\n';
+  summary += '- ' + pickCommon(joined) + '\n\n';
+  summary += '使い分け:\n';
+  summary += '- チャピ子ミニ: 速いが浅い\n';
+  summary += '- WebLLM 1B: 軽めで試しやすい\n';
+  summary += '- WebLLM 3B: 重いが少し賢い\n';
+  addAnswer('チャピ子まとめ', summary);
+};
+
+function pickCommon(text) {
+  if (text.indexOf('Kindle') >= 0 || text.indexOf('キンドル') >= 0) return 'Kindleでは軽量版、PC/スマホではWebLLM版に分けるのが現実的です。';
+  if (text.indexOf('無料') >= 0) return '無料にするなら、APIではなくブラウザ内ローカル推論を使うのが安全です。';
+  return '複数の答えを並べて比較し、最後に自分向けにまとめる使い方が向いています。';
+}
+
+function addAnswer(name, text) {
+  answers.push({ name, text });
+  renderResults();
+}
+
+function renderResults() {
+  const box = document.getElementById('results');
+  if (!answers.length) {
+    box.innerHTML = '<div class="small">ここに回答が出ます。</div>';
+    return;
+  }
+  box.innerHTML = answers.map(a => '<div class="result"><div class="modelName">' + esc(a.name) + '</div>' + esc(a.text) + '</div>').join('');
+}
+
+window.clearResults = function(){
+  answers = [];
+  renderResults();
+  setStatus('消去しました');
+};
+
+function setStatus(s){ document.getElementById('status').textContent = s; }
+function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>
