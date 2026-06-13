@@ -1,0 +1,13 @@
+name = "kindle-chapiko"
+main = "kindle_chapiko_worker.js"
+compatibility_date = "2026-06-13"
+
+# 必須: Secretで設定してください。wrangler.tomlにはAPIキーを書かないでください。
+# npx wrangler secret put OPENAI_API_KEY
+
+# 任意: 合言葉を付ける場合
+# npx wrangler secret put ACCESS_CODE
+
+# 任意: モデルを変える場合。SecretではなくVariableでも可。
+[vars]
+OPENAI_MODEL = "gpt-4.1-mini"
