@@ -8,9 +8,52 @@ Kindleで見やすい入口ページです。
 https://kouheim1979.github.io/chapiko/
 ```
 
-## 追加したもの
+## 無料LLM横断 チャピ子ハブ
 
-### 簡易LLM チャピ子ミニ
+```text
+https://kouheim1979.github.io/chapiko/free-llm-hub.html
+```
+
+APIキーなしで、複数の無料LLMを横断比較するページです。
+
+追加したモデル系統:
+
+```text
+チャピ子ミニ
+SmolLM2
+Qwen 2.5
+Qwen 3 / 3.5
+Qwen Coder
+Llama 3.2 / 3.1
+Hermes
+Gemma / Gemma JPN
+Phi 3.5 / Phi 4 mini
+Mistral
+OpenHermes
+WizardMath
+DeepSeek R1 Distill Qwen
+OLMo
+```
+
+モデル本体はGitHubに置いていません。WebLLM/Hugging Face側から取得し、推論はブラウザ内で行います。
+
+便利ボタン:
+
+```text
+軽量おすすめ
+日本語寄り
+技術/コード寄り
+全部選択
+全部解除
+```
+
+注意:
+
+- WebLLMはWebGPU対応ブラウザが必要です。
+- 8B/9B級モデルはかなり重いです。
+- KindleではWebLLMは厳しいので、Kindleは簡易LLMを使う想定です。
+
+## 簡易LLM チャピ子ミニ
 
 ```text
 https://kouheim1979.github.io/chapiko/simple-llm.html
@@ -25,14 +68,7 @@ https://kouheim1979.github.io/chapiko/simple-llm.html
 - Kindle向けに白黒・大文字・軽量HTMLで表示する
 - OpenAI APIキーなしで動く
 
-できないこと:
-
-- ChatGPTと同じ精度で考える
-- 最新情報を自動で調べる
-- 別端末に学習内容を同期する
-- 本物のLLMのように自然に長文生成する
-
-### オンライン表示中継
+## オンライン表示中継
 
 VDO.Ninja の `push` と `view` のリンクを作ります。
 
@@ -48,6 +84,7 @@ VDO.Ninja の `push` と `view` のリンクを作ります。
 
 ```text
 index.html                         入口ページ
+free-llm-hub.html                  無料LLM横断ページ
 simple-llm.html                    APIなし簡易チャット
 .github/workflows/pages.yml        GitHub Pages自動デプロイ
 README.md                          この説明
