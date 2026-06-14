@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -41,3 +43,10 @@ def chat(req: ChatRequest):
     return {
         "reply": "チャピ子最小APIです。外部サーバ接続は成功しています。質問は「" + req.message + "」です。"
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", "7860"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
