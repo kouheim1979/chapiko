@@ -16,20 +16,24 @@ https://kouheim1979.github.io/chapiko/external-server-llm.html
 
 モデルと推論は外部サーバ、GitHub Pagesは画面だけにする方式です。
 
-構成:
+複数のHugging Face Spaceを登録できます。
 
 ```text
-GitHub Pages
-external-server-llm.html
-  ↓ POST /chat
-Hugging Face Space
-FastAPI + llama.cpp
-  ↓
-Hugging Face Model Repo
-GGUFモデル
+Space 1: 最小API・接続確認
+Space 2: 軽量LLM
+Space 3: 予備または別モデル
+GitHub Pages: 上から順に接続 / 全部に質問
 ```
 
-Hugging Face Space側のテンプレート:
+まずはSpace 1を最小APIでRunningにするのが最優先です。
+
+```text
+hf-space-minimal-template/app.py
+hf-space-minimal-template/requirements.txt
+hf-space-minimal-template/Dockerfile
+```
+
+その後、軽量LLM化します。
 
 ```text
 hf-space-template/app.py
@@ -42,8 +46,8 @@ hf-space-template/README.md
 
 - 無料CPU Spaceは遅いです。
 - 無料Spaceは未使用時にスリープします。
-- 小型GGUFモデル推奨です。
-- 初回リクエストはモデルのダウンロードとロードで時間がかかります。
+- 複数Spaceは大きいLLMの合体ではなく、逃げ道・役割分担です。
+- まず最小APIで `/health` と `/chat` を通します。
 
 ## 自分専用LLM チャピ子
 
@@ -151,7 +155,8 @@ VDO.Ninja の `push` と `view` のリンクを作ります。
 ```text
 index.html                         入口ページ
 external-server-llm.html           外部サーバLLM用の画面
-hf-space-template/                 Hugging Face Space用テンプレート
+hf-space-minimal-template/         Hugging Face Space用 最小APIテンプレート
+hf-space-template/                 Hugging Face Space用 LLMテンプレート
 my-hf-llm.html                     自分専用Hugging Faceモデル用ページ
 free-llm-hub.html                  無料LLM横断ページ
 simple-llm.html                    APIなし簡易チャット
