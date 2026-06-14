@@ -17,6 +17,7 @@
   button { font-weight:bold; padding:12px; }
   .small { font-size:15px; }
   .result { white-space:pre-wrap; word-break:break-word; border-top:1px solid #000; padding-top:10px; }
+  .endpoint { border-top:1px dotted #000; padding-top:8px; margin-top:8px; }
   a { color:#000; }
 </style>
 </head>
@@ -25,19 +26,33 @@
   <h1>外部サーバLLM チャピ子</h1>
 
   <div class="box small">
-    モデルと推論は外部サーバ、ここはブラウザ画面だけです。Hugging Face Spaceなどに置いたAPIへ接続します。
+    モデルと推論は外部サーバ、ここはブラウザ画面だけです。複数のHugging Face Spaceを登録して、上から順に接続します。
   </div>
 
   <div class="box warn small">
-    無料のHugging Face Spaceはスリープします。最初の1回は起動に時間がかかります。LLMは小型GGUF推奨です。
+    無料Spaceはスリープします。複数登録しておくと、1つ目が失敗した時に2つ目へ逃がせます。ただし、大きいLLMを合体して速くする用途ではありません。
   </div>
 
   <div class="box">
     <h2>1. 外部サーバ設定</h2>
-    <label>チャットAPI URL</label>
-    <input id="apiUrl" placeholder="例: https://yourname-chapiko-llm.hf.space/chat">
+    <div class="small">API URLは `/chat` まで入れます。まずは1行目だけでOKです。</div>
+
+    <div class="endpoint">
+      <label>Space 1 / チャットAPI URL</label>
+      <input id="apiUrl1" placeholder="例: https://kouheim-chapiko-llm.hf.space/chat">
+    </div>
+    <div class="endpoint">
+      <label>Space 2 / チャットAPI URL</label>
+      <input id="apiUrl2" placeholder="例: https://kouheim-chapiko-llm-2.hf.space/chat">
+    </div>
+    <div class="endpoint">
+      <label>Space 3 / チャットAPI URL</label>
+      <input id="apiUrl3" placeholder="例: https://kouheim-chapiko-llm-3.hf.space/chat">
+    </div>
+
     <button onclick="saveSettings()">設定を保存</button>
-    <button onclick="healthCheck()">接続テスト</button>
+    <button onclick="healthCheckAll()">全部接続テスト</button>
+    <button onclick="healthCheckFirst()">上から1つだけ接続テスト</button>
     <div id="status" class="small">準備OK</div>
   </div>
 
@@ -49,7 +64,8 @@
   <div class="box">
     <h2>3. 質問</h2>
     <textarea id="message" placeholder="ここに質問を書く"></textarea>
-    <button onclick="ask()">聞く</button>
+    <button onclick="askFallback()">上から順に聞く</button>
+    <button onclick="askAll()">全部に聞く</button>
     <button onclick="clearAnswer()">消去</button>
   </div>
 
@@ -68,54 +84,113 @@
 loadSettings();
 
 function loadSettings(){
-  document.getElementById('apiUrl').value = localStorage.getItem('chapiko_external_api_url') || '';
+  document.getElementById('apiUrl1').value = localStorage.getItem('chapiko_external_api_url_1') || localStorage.getItem('chapiko_external_api_url') || '';
+  document.getElementById('apiUrl2').value = localStorage.getItem('chapiko_external_api_url_2') || '';
+  document.getElementById('apiUrl3').value = localStorage.getItem('chapiko_external_api_url_3') || '';
   document.getElementById('systemPrompt').value = localStorage.getItem('chapiko_external_system_prompt') || document.getElementById('systemPrompt').value;
 }
 function saveSettings(){
-  localStorage.setItem('chapiko_external_api_url', val('apiUrl').trim());
+  localStorage.setItem('chapiko_external_api_url_1', val('apiUrl1').trim());
+  localStorage.setItem('chapiko_external_api_url_2', val('apiUrl2').trim());
+  localStorage.setItem('chapiko_external_api_url_3', val('apiUrl3').trim());
   localStorage.setItem('chapiko_external_system_prompt', val('systemPrompt'));
   setStatus('保存しました');
 }
-async function healthCheck(){
-  saveSettings();
-  const base = val('apiUrl').trim().replace(/\/chat\/?$/, '');
-  if (!base) return showError('API URLが空です');
-  setStatus('接続テスト中...');
-  try {
-    const res = await fetch(base + '/health', { method:'GET' });
-    const text = await res.text();
-    showText('接続テスト結果:\nHTTP ' + res.status + '\n' + text);
-    setStatus(res.ok ? '接続OK' : '接続エラー');
-  } catch(e) {
-    showError('接続テストエラー:\n' + errMsg(e));
-    setStatus('接続エラー');
-  }
+function urls(){
+  return [val('apiUrl1').trim(), val('apiUrl2').trim(), val('apiUrl3').trim()].filter(Boolean);
 }
-async function ask(){
+function baseOf(chatUrl){ return chatUrl.replace(/\/chat\/?$/, ''); }
+
+async function healthCheckOne(url){
+  const base = baseOf(url);
+  const res = await fetch(base + '/health', { method:'GET' });
+  const text = await res.text();
+  return 'GET ' + base + '/health\nHTTP ' + res.status + '\n' + text;
+}
+async function healthCheckAll(){
   saveSettings();
-  const url = val('apiUrl').trim();
-  const message = val('message').trim();
-  if (!url) return showError('API URLが空です');
-  if (!message) return showError('質問が空です');
-  setStatus('送信中... 無料Spaceは起動に時間がかかることがあります');
-  showText('送信中...');
-  try {
-    const res = await fetch(url, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ message: message, system: val('systemPrompt') })
-    });
-    const text = await res.text();
-    let data = null;
-    try { data = JSON.parse(text); } catch(e) {}
-    if (!res.ok) throw new Error('HTTP ' + res.status + '\n' + text);
-    const reply = data && (data.reply || data.answer || data.text) ? (data.reply || data.answer || data.text) : text;
-    showText(reply);
-    setStatus('完了');
-  } catch(e) {
-    showError('送信エラー:\n' + errMsg(e) + '\n\n対処:\n1. Spaceが起動しているか確認\n2. API URL末尾が /chat か確認\n3. Space側CORS設定を確認\n4. 無料CPUなら初回起動を待つ');
-    setStatus('送信エラー');
+  const list = urls();
+  if (!list.length) return showError('API URLが空です');
+  setStatus('全部接続テスト中...');
+  const out = [];
+  for (let i=0; i<list.length; i++) {
+    try {
+      out.push('--- Space ' + (i+1) + ' OK ---\n' + await healthCheckOne(list[i]));
+    } catch(e) {
+      out.push('--- Space ' + (i+1) + ' NG ---\n' + list[i] + '\n' + errMsg(e));
+    }
   }
+  showText(out.join('\n\n'));
+  setStatus('接続テスト完了');
+}
+async function healthCheckFirst(){
+  saveSettings();
+  const list = urls();
+  if (!list.length) return showError('API URLが空です');
+  setStatus('上から接続テスト中...');
+  for (let i=0; i<list.length; i++) {
+    try {
+      const result = await healthCheckOne(list[i]);
+      showText('Space ' + (i+1) + ' で接続OK\n\n' + result);
+      setStatus('接続OK: Space ' + (i+1));
+      return;
+    } catch(e) {}
+  }
+  showError('全Spaceに接続できませんでした。起動中/スリープ/URL間違いの可能性があります。');
+  setStatus('接続エラー');
+}
+async function askFallback(){
+  saveSettings();
+  const list = urls();
+  const message = val('message').trim();
+  if (!list.length) return showError('API URLが空です');
+  if (!message) return showError('質問が空です');
+  setStatus('上から順に送信中...');
+  showText('送信中...');
+  const errors = [];
+  for (let i=0; i<list.length; i++) {
+    try {
+      const reply = await callChat(list[i], message);
+      showText('Space ' + (i+1) + ' から回答:\n\n' + reply);
+      setStatus('完了: Space ' + (i+1));
+      return;
+    } catch(e) {
+      errors.push('Space ' + (i+1) + ' NG: ' + errMsg(e));
+    }
+  }
+  showError('全Spaceで失敗しました。\n\n' + errors.join('\n\n'));
+  setStatus('送信エラー');
+}
+async function askAll(){
+  saveSettings();
+  const list = urls();
+  const message = val('message').trim();
+  if (!list.length) return showError('API URLが空です');
+  if (!message) return showError('質問が空です');
+  setStatus('全部に送信中...');
+  showText('送信中...');
+  const out = [];
+  for (let i=0; i<list.length; i++) {
+    try {
+      out.push('--- Space ' + (i+1) + ' ---\n' + await callChat(list[i], message));
+    } catch(e) {
+      out.push('--- Space ' + (i+1) + ' エラー ---\n' + errMsg(e));
+    }
+  }
+  showText(out.join('\n\n'));
+  setStatus('完了');
+}
+async function callChat(url, message){
+  const res = await fetch(url, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ message: message, system: val('systemPrompt') })
+  });
+  const text = await res.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch(e) {}
+  if (!res.ok) throw new Error('HTTP ' + res.status + '\n' + text);
+  return data && (data.reply || data.answer || data.text) ? (data.reply || data.answer || data.text) : text;
 }
 function clearAnswer(){ showText('ここに回答が出ます。'); setStatus('消去しました'); }
 function val(id){ return document.getElementById(id).value; }
