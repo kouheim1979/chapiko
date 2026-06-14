@@ -1,5 +1,7 @@
 fastapi
 uvicorn[standard]
-llama-cpp-python
-huggingface_hub
+transformers
+accelerate
 pydantic
+safetensors
+tokenizers
