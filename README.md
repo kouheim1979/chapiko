@@ -14,40 +14,48 @@ https://kouheim1979.github.io/chapiko/
 https://kouheim1979.github.io/chapiko/external-server-llm.html
 ```
 
-モデルと推論は外部サーバ、GitHub Pagesは画面だけにする方式です。
+モデルと推論は外部サーバ（Hugging Face Space 無料CPU）、GitHub Pagesは画面だけにする方式です。APIキー不要・無料で、本物のLLMが使えます。画面はES5 + XMLHttpRequestだけで書いてあるので、古いKindleブラウザでも動く想定です（実機での確認はこれから）。
 
 複数のHugging Face Spaceを登録できます。
 
 ```text
 Space 1: 最小API・接続確認
-Space 2: 軽量LLM
+Space 2: 軽量LLM（Qwen2.5 0.5B）
 Space 3: 予備または別モデル
 GitHub Pages: 上から順に接続 / 全部に質問
 ```
 
-まずはSpace 1を最小APIでRunningにするのが最優先です。
+### 実現までの手順
+
+1. **Space 1（最小API）を作る** — 数十秒でビルドできる接続確認用
+   - Hugging Faceで New Space → SDK `Docker` → `Blank` → `CPU basic (free)`
+   - `hf-space-minimal-template/` の4ファイル（`README.md` `app.py` `requirements.txt` `Dockerfile`）をアップロード
+   - `https://<ユーザー名>-<Space名>.hf.space/health` が `{"ok":true,"status":"ready",...}` になればOK
+2. **画面から接続する**
+   - `external-server-llm.html` の「外部サーバ設定」に、SpaceページのURL（`https://huggingface.co/spaces/<ユーザー名>/<Space名>`）か `<ユーザー名>/<Space名>` を貼る（`.hf.space` のURLへ自動変換）
+   - 「接続テスト」→ 質問して、最小APIの返事が来ればGitHub Pages ↔ Space の通信は完成
+3. **Space 2（軽量LLM）を作る**
+   - 同じ手順で `hf-space-template/` の4ファイルをアップロード（初回ビルド5〜10分）
+   - Running後、モデルを裏で読み込みます。画面の「起こす」で「準備OK」まで待つ
+   - 公開Spaceは誰でも叩けるので、Settings → Variables and secrets → New secret で `ACCESS_CODE` を設定し、画面の「合言葉」に同じ値を入れるのがおすすめ
+4. **Kindleで使う**
+   - PCで設定後「Kindle用URLを作る」を押し、出てきたURLをKindleのブラウザで開く（Space設定が入った状態で始まる。合言葉は手入力）
+
+### うまくいかない時
 
 ```text
-hf-space-minimal-template/app.py
-hf-space-minimal-template/requirements.txt
-hf-space-minimal-template/Dockerfile
-```
-
-その後、軽量LLM化します。
-
-```text
-hf-space-template/app.py
-hf-space-template/requirements.txt
-hf-space-template/Dockerfile
-hf-space-template/README.md
+接続できません      → スリープ中 / ビルド中 / URL間違い。「起こす」かSpaceページを開く
+モデル読み込み中    → 起動直後。「起こす」で準備OKまで待つ（1〜3分）
+合言葉が違います    → Spaceの ACCESS_CODE と画面の合言葉を合わせる
+タイムアウト        → 無料CPUで回答が長すぎる。Spaceの MAX_NEW_TOKENS を下げる
 ```
 
 注意:
 
-- 無料CPU Spaceは遅いです。
-- 無料Spaceは未使用時にスリープします。
+- 無料CPU Spaceは遅いです（0.5Bモデルで1回答に数十秒）。
+- 無料Spaceは48時間使わないとスリープします。スリープ明けはビルド済みでもモデル読み込みに1〜3分かかります。
 - 複数Spaceは大きいLLMの合体ではなく、逃げ道・役割分担です。
-- まず最小APIで `/health` と `/chat` を通します。
+- モデルやトークン数はSpaceのVariablesで変えられます。詳しくは `hf-space-template/README.md`。
 
 ## 自分専用LLM チャピ子
 
@@ -154,9 +162,9 @@ VDO.Ninja の `push` と `view` のリンクを作ります。
 
 ```text
 index.html                         入口ページ
-external-server-llm.html           外部サーバLLM用の画面
-hf-space-minimal-template/         Hugging Face Space用 最小APIテンプレート
-hf-space-template/                 Hugging Face Space用 LLMテンプレート
+external-server-llm.html           外部サーバLLM用の画面（Kindle対応の軽量版）
+hf-space-minimal-template/         Hugging Face Space用 最小APIテンプレート（4ファイルをそのままSpaceへ）
+hf-space-template/                 Hugging Face Space用 LLMテンプレート（transformers CPU / 4ファイルをそのままSpaceへ）
 my-hf-llm.html                     自分専用Hugging Faceモデル用ページ
 free-llm-hub.html                  無料LLM横断ページ
 simple-llm.html                    APIなし簡易チャット

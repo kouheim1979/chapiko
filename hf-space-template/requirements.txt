@@ -1,7 +1,6 @@
-fastapi
-uvicorn[standard]
-transformers
-accelerate
-pydantic
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2
+transformers>=4.45,<6
 safetensors
 tokenizers

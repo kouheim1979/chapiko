@@ -12,12 +12,26 @@
   h2 { font-size:23px; margin:10px 0 6px; }
   .box { border:2px solid #000; padding:12px; margin:10px 0; }
   .warn { border:2px dashed #000; padding:10px; margin:10px 0; }
-  input, textarea, button { width:100%; box-sizing:border-box; font-size:20px; border:2px solid #000; background:#fff; color:#000; padding:8px; margin:5px 0; }
-  textarea { height:120px; }
+  label { display:block; font-size:16px; margin-top:6px; font-weight:bold; }
+  input, textarea, button { width:100%; box-sizing:border-box; font-size:20px; border:2px solid #000; border-radius:0; background:#fff; color:#000; padding:8px; margin:5px 0; }
+  input[type=checkbox] { width:auto; margin:0 6px 0 0; }
+  textarea { height:120px; font-family:sans-serif; }
   button { font-weight:bold; padding:12px; }
+  button[disabled] { border-style:dashed; color:#555; }
+  .row { overflow:hidden; }
+  .half { float:left; width:49%; margin-right:2%; }
+  .half.last { margin-right:0; }
   .small { font-size:15px; }
-  .result { white-space:pre-wrap; word-break:break-word; border-top:1px solid #000; padding-top:10px; }
+  .tiny { font-size:13px; word-break:break-all; }
   .endpoint { border-top:1px dotted #000; padding-top:8px; margin-top:8px; }
+  .turn { border-top:2px solid #000; padding:8px 0; }
+  .msg { white-space:pre-wrap; word-break:break-word; padding:4px 0; }
+  .who { font-size:15px; font-weight:bold; }
+  .meta { font-size:13px; }
+  .err { border-left:4px solid #000; padding-left:8px; }
+  .url { font-family:monospace; font-size:14px; word-break:break-all; border:1px solid #000; padding:8px; margin:6px 0; }
+  #status { font-size:16px; margin:6px 0; white-space:pre-wrap; }
+  #health { white-space:pre-wrap; font-size:15px; }
   a { color:#000; }
 </style>
 </head>
@@ -26,178 +40,548 @@
   <h1>外部サーバLLM チャピ子</h1>
 
   <div class="box small">
-    モデルと推論は外部サーバ、ここはブラウザ画面だけです。複数のHugging Face Spaceを登録して、上から順に接続します。
+    モデルと推論はHugging Face Space、ここは画面だけです。APIキー不要・無料。軽い書き方なので、PC/スマホに加えてKindleのブラウザでも動く想定です。
   </div>
 
-  <div class="box warn small">
-    無料Spaceはスリープします。複数登録しておくと、1つ目が失敗した時に2つ目へ逃がせます。ただし、大きいLLMを合体して速くする用途ではありません。
+  <div id="firstGuide" class="warn small" style="display:none">
+    まだSpaceが登録されていません。下の <a href="#settings">外部サーバ設定</a> にSpaceを入れてください。<br>
+    PCで設定したら「Kindle用URLを作る」で、Kindleに打ち込む短いURLを作れます。
   </div>
 
   <div class="box">
-    <h2>1. 外部サーバ設定</h2>
-    <div class="small">API URLは `/chat` まで入れます。まずは1行目だけでOKです。</div>
+    <h2>質問</h2>
+    <textarea id="message" maxlength="2000" placeholder="ここに質問を書く"></textarea>
+    <div class="row">
+      <div class="half"><button id="sendBtn" onclick="askFallback()">送信</button></div>
+      <div class="half last"><button id="allBtn" onclick="askAll()">全部に聞く</button></div>
+    </div>
+    <div class="row">
+      <div class="half"><button onclick="quick('短く箇条書きで答えて。\n')">短く</button></div>
+      <div class="half last"><button onclick="quick('中学生にもわかるように説明して。\n')">やさしく</button></div>
+    </div>
+    <label class="small" style="font-weight:normal"><input type="checkbox" id="useHistory" checked onclick="saveSettings(true)">会話の続きとして送る（直近の履歴も送信）</label>
+    <div id="status">準備OK</div>
+  </div>
+
+  <div class="box">
+    <h2>会話 <span class="small">新しい順</span></h2>
+    <div id="log"><div class="small">ここに会話が出ます。</div></div>
+    <button onclick="clearLog()">会話を消去</button>
+  </div>
+
+  <div class="box" id="settings">
+    <h2>外部サーバ設定</h2>
+    <div class="small">
+      次のどれを入れてもOKです。上から順に使い、失敗したら次のSpaceへ逃がします。<br>
+      ・SpaceページのURL <span class="tiny">https://huggingface.co/spaces/ユーザー名/Space名</span><br>
+      ・短縮形 <span class="tiny">ユーザー名/Space名</span><br>
+      ・直接URL <span class="tiny">https://ユーザー名-space名.hf.space</span>
+    </div>
 
     <div class="endpoint">
-      <label>Space 1 / チャットAPI URL</label>
-      <input id="apiUrl1" placeholder="例: https://kouheim-chapiko-llm.hf.space/chat">
+      <label for="apiUrl1">Space 1（まずは最小APIで接続確認）</label>
+      <input id="apiUrl1" placeholder="例: kouheim1979/chapiko-minimal" oninput="showResolved()">
+      <div id="resolved1" class="tiny"></div>
     </div>
     <div class="endpoint">
-      <label>Space 2 / チャットAPI URL</label>
-      <input id="apiUrl2" placeholder="例: https://kouheim-chapiko-llm-2.hf.space/chat">
+      <label for="apiUrl2">Space 2（軽量LLM）</label>
+      <input id="apiUrl2" placeholder="例: kouheim1979/chapiko-llm" oninput="showResolved()">
+      <div id="resolved2" class="tiny"></div>
     </div>
     <div class="endpoint">
-      <label>Space 3 / チャットAPI URL</label>
-      <input id="apiUrl3" placeholder="例: https://kouheim-chapiko-llm-3.hf.space/chat">
+      <label for="apiUrl3">Space 3（予備・別モデル）</label>
+      <input id="apiUrl3" placeholder="空欄でOK" oninput="showResolved()">
+      <div id="resolved3" class="tiny"></div>
+    </div>
+
+    <div class="endpoint">
+      <label for="accessCode">合言葉（SpaceにACCESS_CODEを設定した場合だけ）</label>
+      <input id="accessCode" type="password" autocomplete="off" placeholder="未設定なら空欄">
     </div>
 
     <button onclick="saveSettings()">設定を保存</button>
-    <button onclick="healthCheckAll()">全部接続テスト</button>
-    <button onclick="healthCheckFirst()">上から1つだけ接続テスト</button>
-    <div id="status" class="small">準備OK</div>
+    <div class="row">
+      <div class="half"><button onclick="healthCheck(false)">接続テスト</button></div>
+      <div class="half last"><button id="wakeBtn" onclick="healthCheck(true)">起こす（準備OKまで待つ）</button></div>
+    </div>
+    <div id="health" class="small"></div>
+    <button onclick="makeShareUrl()">Kindle用URLを作る</button>
+    <div id="shareBox" style="display:none">
+      <div class="small">このURLをKindleのブラウザで開くと、Space設定が入った状態で始まります（合言葉は含みません）。</div>
+      <div id="shareUrl" class="url"></div>
+    </div>
   </div>
 
   <div class="box">
-    <h2>2. チャピ子設定</h2>
+    <h2>チャピ子設定</h2>
     <textarea id="systemPrompt">あなたはチャピ子です。日本語で、結論から、短く、読みやすく答えてください。Kouheiさん向けに、技術質問では現場のPLC・制御・ネットワークの例を入れてください。</textarea>
-  </div>
-
-  <div class="box">
-    <h2>3. 質問</h2>
-    <textarea id="message" placeholder="ここに質問を書く"></textarea>
-    <button onclick="askFallback()">上から順に聞く</button>
-    <button onclick="askAll()">全部に聞く</button>
-    <button onclick="clearAnswer()">消去</button>
-  </div>
-
-  <div class="box">
-    <h2>回答 / エラー</h2>
-    <div id="answer" class="result">ここに回答が出ます。</div>
+    <button onclick="saveSettings()">チャピ子設定を保存</button>
   </div>
 
   <div class="box small">
-    サーバ側は `POST /chat` で `{message, system}` を受け取り、`{reply}` を返す想定です。<br>
+    <b>うまくいかない時</b><br>
+    1. 「接続テスト」で各Spaceの状態を見る<br>
+    2. 「接続できません」→ Spaceがスリープ中・ビルド中・URL間違い。「起こす」を押して待つか、Spaceページを開く<br>
+    3. 「モデル読み込み中」→ 起動直後です。「起こす」で準備OKまで待つ<br>
+    4. 無料CPUは遅いです。1回答に数十秒かかります<br><br>
+    サーバ側は <code>POST /chat</code> で <code>{message, system, history, code}</code> を受け取り <code>{reply}</code> を返します。テンプレートはリポジトリの <code>hf-space-minimal-template/</code> と <code>hf-space-template/</code> です。<br>
     <a href="./">トップへ戻る</a>
   </div>
 </div>
 
 <script>
-loadSettings();
+// Kindleなど古いブラウザでも動くよう、ES5 + XMLHttpRequest だけで書いています。
+var KEY_URL = 'chapiko_external_api_url_';
+var KEY_SYSTEM = 'chapiko_external_system_prompt';
+var KEY_CODE = 'chapiko_external_code';
+var KEY_LOG = 'chapiko_external_log';
+var KEY_USE_HISTORY = 'chapiko_external_use_history';
+var HEALTH_TIMEOUT_MS = 20000;
+var CHAT_TIMEOUT_MS = 180000;
+var WAKE_INTERVAL_MS = 5000;
+var WAKE_LIMIT_MS = 300000;
+var HISTORY_SEND = 6;
+var LOG_KEEP = 40;
+
+var logList = [];
+var busy = false;
+var waking = false;
+var tickTimer = null;
+
+init();
+
+function init(){
+  loadSettings();
+  var fromUrl = applyQuery();
+  showResolved();
+  loadLog();
+  renderLog();
+  if (fromUrl) {
+    saveSettings(true);
+    setStatus('URLからSpace設定を読み込みました。まず「接続テスト」を押してください。');
+  }
+  document.getElementById('firstGuide').style.display = endpoints().length ? 'none' : 'block';
+  document.getElementById('message').onkeydown = function(e){
+    e = e || window.event;
+    if ((e.ctrlKey || e.metaKey) && e.keyCode === 13) askFallback();
+  };
+}
+
+/* ---------- 設定 ---------- */
+
+function store(k, v){ try { localStorage.setItem(k, v); } catch(e) {} }
+function restore(k){ try { return localStorage.getItem(k); } catch(e) { return null; } }
 
 function loadSettings(){
-  document.getElementById('apiUrl1').value = localStorage.getItem('chapiko_external_api_url_1') || localStorage.getItem('chapiko_external_api_url') || '';
-  document.getElementById('apiUrl2').value = localStorage.getItem('chapiko_external_api_url_2') || '';
-  document.getElementById('apiUrl3').value = localStorage.getItem('chapiko_external_api_url_3') || '';
-  document.getElementById('systemPrompt').value = localStorage.getItem('chapiko_external_system_prompt') || document.getElementById('systemPrompt').value;
+  setVal('apiUrl1', restore(KEY_URL + '1') || restore('chapiko_external_api_url') || '');
+  setVal('apiUrl2', restore(KEY_URL + '2') || '');
+  setVal('apiUrl3', restore(KEY_URL + '3') || '');
+  setVal('accessCode', restore(KEY_CODE) || '');
+  var sys = restore(KEY_SYSTEM);
+  if (sys) setVal('systemPrompt', sys);
+  document.getElementById('useHistory').checked = restore(KEY_USE_HISTORY) !== '0';
 }
-function saveSettings(){
-  localStorage.setItem('chapiko_external_api_url_1', val('apiUrl1').trim());
-  localStorage.setItem('chapiko_external_api_url_2', val('apiUrl2').trim());
-  localStorage.setItem('chapiko_external_api_url_3', val('apiUrl3').trim());
-  localStorage.setItem('chapiko_external_system_prompt', val('systemPrompt'));
-  setStatus('保存しました');
-}
-function urls(){
-  return [val('apiUrl1').trim(), val('apiUrl2').trim(), val('apiUrl3').trim()].filter(Boolean);
-}
-function baseOf(chatUrl){ return chatUrl.replace(/\/chat\/?$/, ''); }
 
-async function healthCheckOne(url){
-  const base = baseOf(url);
-  const res = await fetch(base + '/health', { method:'GET' });
-  const text = await res.text();
-  return 'GET ' + base + '/health\nHTTP ' + res.status + '\n' + text;
+function saveSettings(quiet){
+  for (var i = 1; i <= 3; i++) store(KEY_URL + i, trim(val('apiUrl' + i)));
+  store(KEY_CODE, val('accessCode'));
+  store(KEY_SYSTEM, val('systemPrompt'));
+  store(KEY_USE_HISTORY, document.getElementById('useHistory').checked ? '1' : '0');
+  document.getElementById('firstGuide').style.display = endpoints().length ? 'none' : 'block';
+  if (!quiet) setStatus('保存しました');
 }
-async function healthCheckAll(){
-  saveSettings();
-  const list = urls();
-  if (!list.length) return showError('API URLが空です');
-  setStatus('全部接続テスト中...');
-  const out = [];
-  for (let i=0; i<list.length; i++) {
-    try {
-      out.push('--- Space ' + (i+1) + ' OK ---\n' + await healthCheckOne(list[i]));
-    } catch(e) {
-      out.push('--- Space ' + (i+1) + ' NG ---\n' + list[i] + '\n' + errMsg(e));
+
+// ?s1=user/space&s2=... で開かれたら設定に入れる
+function applyQuery(){
+  var q = location.search ? location.search.substring(1).split('&') : [];
+  var found = false;
+  for (var i = 0; i < q.length; i++) {
+    var kv = q[i].split('=');
+    var m = /^s([123])$/.exec(kv[0]);
+    if (m && kv[1]) {
+      try { setVal('apiUrl' + m[1], decodeURIComponent(kv[1].replace(/\+/g, ' '))); found = true; } catch(e) {}
     }
   }
-  showText(out.join('\n\n'));
-  setStatus('接続テスト完了');
+  return found;
 }
-async function healthCheckFirst(){
-  saveSettings();
-  const list = urls();
-  if (!list.length) return showError('API URLが空です');
-  setStatus('上から接続テスト中...');
-  for (let i=0; i<list.length; i++) {
-    try {
-      const result = await healthCheckOne(list[i]);
-      showText('Space ' + (i+1) + ' で接続OK\n\n' + result);
-      setStatus('接続OK: Space ' + (i+1));
+
+function makeShareUrl(){
+  saveSettings(true);
+  var parts = [];
+  for (var i = 1; i <= 3; i++) {
+    var raw = trim(val('apiUrl' + i));
+    if (!raw) continue;
+    var sp = spaceIdOf(raw);
+    parts.push('s' + i + '=' + encodeURIComponent(sp ? sp.owner + '/' + sp.name : resolveBase(raw)));
+  }
+  if (!parts.length) { setStatus('Spaceが空です'); return; }
+  var url = location.protocol + '//' + location.host + location.pathname + '?' + parts.join('&');
+  document.getElementById('shareUrl').innerHTML = '<a href="' + escAttr(url) + '">' + esc(url) + '</a>';
+  document.getElementById('shareBox').style.display = 'block';
+}
+
+/* ---------- URL変換 ---------- */
+
+// "user/space" や Spaceページ URL から {owner, name} を取り出す
+function spaceIdOf(raw){
+  var s = trim(raw);
+  var m = /^(?:https?:\/\/)?(?:www\.)?huggingface\.co\/spaces\/([^\/?#]+)\/([^\/?#]+)/i.exec(s);
+  if (!m) m = /^([A-Za-z0-9][A-Za-z0-9_-]*)\/([A-Za-z0-9][A-Za-z0-9._-]*)\/?$/.exec(s);
+  return m ? { owner: m[1], name: m[2] } : null;
+}
+
+// どの書き方でも https://xxx.hf.space のようなベースURLにする（末尾の /chat や /health は外す）
+function resolveBase(raw){
+  var s = trim(raw);
+  if (!s) return '';
+  var sp = spaceIdOf(s);
+  if (sp) return 'https://' + (sp.owner + '-' + sp.name).toLowerCase().replace(/[_.]/g, '-') + '.hf.space';
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  s = s.replace(/[?#].*$/, '').replace(/\/+$/, '');
+  s = s.replace(/\/(chat|health)$/i, '');
+  return s.replace(/\/+$/, '');
+}
+
+function endpoints(){
+  var list = [];
+  for (var i = 1; i <= 3; i++) {
+    var raw = trim(val('apiUrl' + i));
+    if (raw) list.push({ no: i, raw: raw, base: resolveBase(raw), space: spaceIdOf(raw) });
+  }
+  return list;
+}
+
+function showResolved(){
+  for (var i = 1; i <= 3; i++) {
+    var raw = trim(val('apiUrl' + i));
+    var el = document.getElementById('resolved' + i);
+    if (!raw) { el.innerHTML = ''; continue; }
+    var base = resolveBase(raw);
+    var sp = spaceIdOf(raw);
+    var html = '接続先: ' + esc(base);
+    if (sp) html += ' / <a href="https://huggingface.co/spaces/' + escAttr(sp.owner + '/' + sp.name) + '" target="_blank">Spaceページを開く</a>';
+    if (/^http:\/\//i.test(base) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(base) && location.protocol === 'https:') {
+      html += '<br>注意: http:// のURLは https のページからは接続できません';
+    }
+    el.innerHTML = html;
+  }
+}
+
+/* ---------- 通信 ---------- */
+
+function request(method, url, body, timeoutMs, cb){
+  var x = new XMLHttpRequest();
+  var done = false;
+  var timer = setTimeout(function(){
+    if (done) return;
+    done = true;
+    try { x.abort(); } catch(e) {}
+    cb({ status: 0, timeout: true, text: '' });
+  }, timeoutMs);
+  x.onreadystatechange = function(){
+    if (x.readyState !== 4 || done) return;
+    done = true;
+    clearTimeout(timer);
+    cb({ status: x.status, text: x.responseText || '' });
+  };
+  try {
+    x.open(method, url, true);
+    if (body) x.setRequestHeader('Content-Type', 'application/json');
+    x.send(body || null);
+  } catch(e) {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    cb({ status: 0, text: '', exception: errMsg(e) });
+  }
+}
+
+function parseJson(text){
+  try { return JSON.parse(text); } catch(e) { return null; }
+}
+
+function describeError(res){
+  if (res.timeout) return 'タイムアウトしました（起動中、または回答に時間がかかりすぎています）';
+  if (res.status === 0) return '接続できません（スリープ中・ビルド中・URL間違い・ネット未接続のどれか）' + (res.exception ? '\n' + res.exception : '');
+  var data = parseJson(res.text);
+  var msg = '';
+  if (data && data.error) msg = String(data.error);
+  else if (data && data.detail) msg = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+  else msg = res.text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').substring(0, 300);
+  if (res.status === 401) return '合言葉が違います。外部サーバ設定の「合言葉」を確認してください。';
+  if (res.status === 503) return 'モデル読み込み中です。「起こす」を押して準備OKになってから送ってください。' + (msg ? '\n' + msg : '');
+  if (res.status === 404) return 'APIが見つかりません（HTTP 404）。URLがSpaceを指しているか確認してください。';
+  return 'HTTP ' + res.status + (msg ? ': ' + msg : '');
+}
+
+function healthOf(ep, cb){
+  request('GET', ep.base + '/health', null, HEALTH_TIMEOUT_MS, function(res){
+    if (res.status < 200 || res.status >= 300) {
+      cb({ state: 'ng', text: describeError(res) });
       return;
-    } catch(e) {}
-  }
-  showError('全Spaceに接続できませんでした。起動中/スリープ/URL間違いの可能性があります。');
-  setStatus('接続エラー');
-}
-async function askFallback(){
-  saveSettings();
-  const list = urls();
-  const message = val('message').trim();
-  if (!list.length) return showError('API URLが空です');
-  if (!message) return showError('質問が空です');
-  setStatus('上から順に送信中...');
-  showText('送信中...');
-  const errors = [];
-  for (let i=0; i<list.length; i++) {
-    try {
-      const reply = await callChat(list[i], message);
-      showText('Space ' + (i+1) + ' から回答:\n\n' + reply);
-      setStatus('完了: Space ' + (i+1));
-      return;
-    } catch(e) {
-      errors.push('Space ' + (i+1) + ' NG: ' + errMsg(e));
     }
-  }
-  showError('全Spaceで失敗しました。\n\n' + errors.join('\n\n'));
-  setStatus('送信エラー');
-}
-async function askAll(){
-  saveSettings();
-  const list = urls();
-  const message = val('message').trim();
-  if (!list.length) return showError('API URLが空です');
-  if (!message) return showError('質問が空です');
-  setStatus('全部に送信中...');
-  showText('送信中...');
-  const out = [];
-  for (let i=0; i<list.length; i++) {
-    try {
-      out.push('--- Space ' + (i+1) + ' ---\n' + await callChat(list[i], message));
-    } catch(e) {
-      out.push('--- Space ' + (i+1) + ' エラー ---\n' + errMsg(e));
-    }
-  }
-  showText(out.join('\n\n'));
-  setStatus('完了');
-}
-async function callChat(url, message){
-  const res = await fetch(url, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ message: message, system: val('systemPrompt') })
+    var d = parseJson(res.text) || {};
+    // 古いテンプレートは status を返さないので ok を見る
+    var state = d.status || (d.ok ? 'ready' : 'loading');
+    var text = state === 'ready' ? '準備OK' : state === 'loading' || state === 'starting' ? 'モデル読み込み中' : 'エラー';
+    if (d.model) text += ' / ' + d.model;
+    if (d.error) text += '\n' + d.error;
+    if (d.access_code_required && !val('accessCode')) text += '\n※このSpaceは合言葉が必要です';
+    cb({ state: state, text: text });
   });
-  const text = await res.text();
-  let data = null;
-  try { data = JSON.parse(text); } catch(e) {}
-  if (!res.ok) throw new Error('HTTP ' + res.status + '\n' + text);
-  return data && (data.reply || data.answer || data.text) ? (data.reply || data.answer || data.text) : text;
 }
-function clearAnswer(){ showText('ここに回答が出ます。'); setStatus('消去しました'); }
+
+function healthCheck(wait){
+  saveSettings(true);
+  var list = endpoints();
+  if (!list.length) { setStatus('Spaceが空です。外部サーバ設定に入れてください。'); return; }
+  if (waking) { waking = false; setWakeLabel(); setHealth('待つのをやめました'); return; }
+  var started = now();
+  waking = !!wait;
+  setWakeLabel();
+  round();
+
+  function round(){
+    var results = [];
+    var left = list.length;
+    setHealth((wait ? '起こしています... ' + secs(started) + '秒\n' : '接続テスト中...\n'));
+    for (var i = 0; i < list.length; i++) (function(i){
+      healthOf(list[i], function(r){
+        results[i] = r;
+        left--;
+        if (left === 0) finish(results);
+      });
+    })(i);
+  }
+
+  function finish(results){
+    var lines = [];
+    var readyNo = 0;
+    for (var i = 0; i < list.length; i++) {
+      lines.push('Space ' + list[i].no + ': ' + results[i].text);
+      if (results[i].state === 'ready' && !readyNo) readyNo = list[i].no;
+    }
+    var body = lines.join('\n');
+    if (!wait) { setHealth(body); return; }
+    if (!waking) return; // 途中でやめた
+    if (readyNo) {
+      waking = false; setWakeLabel();
+      setHealth('Space ' + readyNo + ' が準備OKです（' + secs(started) + '秒）\n\n' + body);
+      setStatus('準備OK: 質問できます');
+      return;
+    }
+    if (now() - started > WAKE_LIMIT_MS) {
+      waking = false; setWakeLabel();
+      setHealth('5分待っても準備OKになりませんでした。Spaceページでビルド/ログを確認してください。\n\n' + body);
+      return;
+    }
+    setHealth('起こしています... ' + secs(started) + '秒（5秒ごとに再確認）\n\n' + body);
+    setTimeout(function(){ if (waking) round(); }, WAKE_INTERVAL_MS);
+  }
+}
+
+function setWakeLabel(){
+  document.getElementById('wakeBtn').innerHTML = waking ? '待つのをやめる' : '起こす（準備OKまで待つ）';
+}
+
+/* ---------- 質問 ---------- */
+
+function payloadFor(message){
+  return JSON.stringify({
+    message: message,
+    system: val('systemPrompt'),
+    history: document.getElementById('useHistory').checked ? recentHistory() : [],
+    code: val('accessCode')
+  });
+}
+
+// サーバへ送る履歴: 直近の user / assistant だけ（エラーは送らない）
+function recentHistory(){
+  var h = [];
+  for (var i = 0; i < logList.length; i++) {
+    var m = logList[i];
+    if ((m.role === 'user' || m.role === 'assistant') && m.content) h.push({ role: m.role, content: m.content });
+  }
+  return h.slice(Math.max(0, h.length - HISTORY_SEND));
+}
+
+function startAsk(){
+  if (busy) { setStatus('送信中です。終わるまで待ってください。'); return null; }
+  saveSettings(true);
+  var list = endpoints();
+  var message = trim(val('message'));
+  if (!list.length) { setStatus('Spaceが空です。外部サーバ設定に入れてください。'); return null; }
+  if (!message) { setStatus('質問が空です'); return null; }
+  return { list: list, message: message, body: payloadFor(message) };
+}
+
+function askFallback(){
+  var job = startAsk();
+  if (!job) return;
+  setBusy(true);
+  setVal('message', '');
+  addLog({ role: 'user', content: job.message });
+  var errors = [];
+  var started = now();
+  tryAt(0);
+
+  function tryAt(i){
+    if (i >= job.list.length) {
+      setBusy(false);
+      addLog({ role: 'error', content: '全Spaceで失敗しました。\n\n' + errors.join('\n\n') });
+      setStatus('送信エラー。「接続テスト」で状態を確認してください。');
+      return;
+    }
+    var ep = job.list[i];
+    startTicker('Space ' + ep.no + ' に送信中');
+    request('POST', ep.base + '/chat', job.body, CHAT_TIMEOUT_MS, function(res){
+      var reply = replyOf(res);
+      if (reply === null) {
+        errors.push('Space ' + ep.no + ': ' + describeError(res));
+        tryAt(i + 1);
+        return;
+      }
+      setBusy(false);
+      addLog({ role: 'assistant', content: reply, meta: metaOf(ep, res, started) });
+      setStatus('完了: Space ' + ep.no + '（' + secs(started) + '秒）');
+    });
+  }
+}
+
+function askAll(){
+  var job = startAsk();
+  if (!job) return;
+  setBusy(true);
+  setVal('message', '');
+  addLog({ role: 'user', content: job.message });
+  var started = now();
+  var results = [];
+  var left = job.list.length;
+  startTicker('全部に送信中');
+  for (var i = 0; i < job.list.length; i++) (function(i){
+    var ep = job.list[i];
+    request('POST', ep.base + '/chat', job.body, CHAT_TIMEOUT_MS, function(res){
+      results[i] = { ep: ep, res: res, reply: replyOf(res) };
+      left--;
+      if (left === 0) finish();
+    });
+  })(i);
+
+  function finish(){
+    setBusy(false);
+    var display = [];
+    var firstReply = '';
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      if (r.reply !== null) {
+        if (!firstReply) firstReply = r.reply;
+        display.push('--- Space ' + r.ep.no + ' (' + metaOf(r.ep, r.res, started) + ') ---\n' + r.reply);
+      } else {
+        display.push('--- Space ' + r.ep.no + ' エラー ---\n' + describeError(r.res));
+      }
+    }
+    // 履歴として次に送るのは最初に成功した回答だけ
+    addLog({ role: firstReply ? 'assistant' : 'error', content: firstReply, display: display.join('\n\n'), meta: '全部に質問' });
+    setStatus('完了（' + secs(started) + '秒）');
+  }
+}
+
+function replyOf(res){
+  if (res.status < 200 || res.status >= 300) return null;
+  var d = parseJson(res.text);
+  if (!d) return res.text || null;
+  if (d.error) return null;
+  return String(d.reply || d.answer || d.text || '(返答なし)');
+}
+
+function metaOf(ep, res, started){
+  var d = parseJson(res.text) || {};
+  var meta = 'Space ' + ep.no;
+  if (d.model) meta += ' / ' + d.model;
+  meta += ' / ' + secs(started) + '秒';
+  return meta;
+}
+
+function quick(prefix){
+  var el = document.getElementById('message');
+  el.value = prefix + el.value;
+  el.focus();
+}
+
+function setBusy(b){
+  busy = b;
+  document.getElementById('sendBtn').disabled = b;
+  document.getElementById('allBtn').disabled = b;
+  if (!b && tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+}
+
+// 送信中の経過秒数を表示（無料CPUは遅いので止まって見えないように）
+function startTicker(label){
+  var started = now();
+  if (tickTimer) clearInterval(tickTimer);
+  setStatus(label + '... 0秒');
+  tickTimer = setInterval(function(){
+    setStatus(label + '... ' + secs(started) + '秒（無料CPUは数十秒かかります）');
+  }, 1000);
+}
+
+/* ---------- 会話ログ ---------- */
+
+function addLog(entry){
+  logList.push(entry);
+  if (logList.length > LOG_KEEP) logList = logList.slice(logList.length - LOG_KEEP);
+  store(KEY_LOG, JSON.stringify(logList));
+  renderLog();
+}
+
+function loadLog(){
+  var s = restore(KEY_LOG);
+  logList = (s && parseJson(s)) || [];
+}
+
+function clearLog(){
+  logList = [];
+  store(KEY_LOG, '[]');
+  renderLog();
+  setStatus('会話を消去しました');
+}
+
+// 質問と回答をひとまとまりにして、新しい順に表示（Kindleでスクロールせず最新が見える）
+function renderLog(){
+  var turns = [];
+  var cur = null;
+  for (var i = 0; i < logList.length; i++) {
+    var m = logList[i];
+    if (m.role === 'user' || !cur) { cur = []; turns.push(cur); }
+    cur.push(m);
+  }
+  var html = '';
+  for (var t = turns.length - 1; t >= 0; t--) {
+    html += '<div class="turn">';
+    for (var j = 0; j < turns[t].length; j++) {
+      var e = turns[t][j];
+      var who = e.role === 'user' ? 'あなた' : e.role === 'error' ? 'エラー' : 'チャピ子';
+      html += '<div class="msg' + (e.role === 'error' ? ' err' : '') + '"><div class="who">' + who +
+        (e.meta ? ' <span class="meta">' + esc(e.meta) + '</span>' : '') + '</div>' +
+        esc(e.display || e.content) + '</div>';
+    }
+    html += '</div>';
+  }
+  document.getElementById('log').innerHTML = html || '<div class="small">ここに会話が出ます。</div>';
+}
+
+/* ---------- 小物 ---------- */
+
 function val(id){ return document.getElementById(id).value; }
-function showText(s){ document.getElementById('answer').textContent = s; }
-function showError(s){ document.getElementById('answer').textContent = s; }
-function setStatus(s){ document.getElementById('status').textContent = s; }
+function setVal(id, v){ document.getElementById(id).value = v; }
+function setStatus(s){ document.getElementById('status').innerHTML = esc(s); }
+function setHealth(s){ document.getElementById('health').innerHTML = esc(s); }
+function trim(s){ return String(s == null ? '' : s).replace(/^\s+|\s+$/g, ''); }
+function now(){ return new Date().getTime(); }
+function secs(started){ return Math.round((now() - started) / 1000); }
 function errMsg(e){ return e && e.message ? e.message : String(e); }
+function esc(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escAttr(s){ return esc(s).replace(/"/g, '&quot;'); }
 </script>
 </body>
 </html>
